@@ -1,0 +1,22 @@
+{
+    "relays": [
+      {
+        "id": 1,
+        "name": "Relay 1",
+        "state": "off",
+        "mode": "manual",
+        "timers": [
+          {
+            "id": 1,
+            "action": "on",
+            "time": "2025-01-23T08:00:00",
+            "repeat": {
+              "days": [ "Monday", "Wednesday", "Friday" ],
+              "interval": "weekly"
+            },
+            "enabled": true
+          }
+        ]
+      }
+    ]
+  }
