@@ -8,11 +8,11 @@
 #include <ArduinoOTA.h>
 
 // WiFi-Zugangsdaten
-const char* ssid = "DEIN_WIFI_SSID";
-const char* password = "DEIN_WIFI_PASSWORT";
+const char* ssid = "Discovery Channel";
+const char* password = "466c697069";
 
 // MQTT-Server
-const char* mqttServer = "mqtt.example.com";
+const char* mqttServer = "192.168.178.95";
 const int mqttPort = 1883;
 const char* mqttUser = "mqtt_username";
 const char* mqttPassword = "mqtt_password";
@@ -84,7 +84,7 @@ void setup() {
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
     pinMode(relayPins[i], OUTPUT);
-    digitalWrite(relayPins[i], LOW); // Relais initial aus
+    digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
   // WLAN verbinden
@@ -102,6 +102,11 @@ void setup() {
 
   // MQTT verbinden
   connectMQTT();
+
+  // Relais-Pins initialisieren
+  for (int i = 0; i < RELAY_COUNT; i++) {
+    digitalWrite( relayPins[i], HIGH ); // Relais initial aus
+  }
 }
 
 void loop() {
@@ -119,16 +124,22 @@ void loop() {
 
   // Timer verarbeiten
   processTimers();
+
+  //updateRelays();
+  // digitalWrite( relayPins[3], LOW );
+  // delay( 1000 );
+  // digitalWrite( relayPins[3], HIGH );
+  // delay( 1000 );
 }
 
-int main(  )
-{
-  setup();
+// int main(  )
+// {
+//   setup();
 
-  while ( 1 )
-    loop();
+// while ( 1 )
+//   loop();
 
-}
+// }
 
 
 // WLAN-Verbindung herstellen
@@ -139,6 +150,7 @@ void setupWiFi() {
     delay(1000);
     Serial.print(".");
   }
+  Serial.println( WiFi.localIP().toString() );											  
   Serial.println(" verbunden!");
 }
 
@@ -204,7 +216,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (String(topic) == "home/relays") {
     parseJSON(message);
-    updateRelays();
+    updateRelays();    
   }
 }
 
@@ -218,30 +230,36 @@ void parseJSON(const String &jsonString) {
     Serial.println("JSON-Parsing fehlgeschlagen!");
     return;
   }
+  Serial.println( jsonString );
 
   JsonArray relaysArray = doc["relays"].as<JsonArray>();
-  for (uint i = 0; i < relaysArray.size() && i < RELAY_COUNT; i++) {
+  for (uint i = 0; i < relaysArray.size() && i < RELAY_COUNT; i++)
+  {
     JsonObject relayObject = relaysArray[i];
-    relays[i].id = relayObject["id"];
-    relays[i].name = relayObject["name"].as<String>();
-    relays[i].state = relayObject["state"].as<String>();
-    relays[i].mode = relayObject["mode"].as<String>();
-    relays[i].timerCount = 0;
+    
+    int idx = (int)(relayObject["id"]);
+    relays[ idx ].id = relayObject["id"];
+    relays[ idx ].name = relayObject["name"].as<String>();
+    relays[ idx ].state = relayObject["state"].as<String>();
+    relays[ idx ].mode = relayObject["mode"].as<String>();
+    relays[ idx ].timerCount = 0;
 
-    JsonArray timersArray = relayObject["timers"].as<JsonArray>();
-    for (uint j = 0; j < timersArray.size() && j < 5; j++) {
-      JsonObject timerObject = timersArray[j];
-      relays[i].timers[j].id = timerObject["id"];
-      relays[i].timers[j].action = timerObject["action"].as<String>();
-      relays[i].timers[j].time = timerObject["time"].as<String>();
-      relays[i].timers[j].enabled = timerObject["enabled"];
+    
 
-      JsonArray repeatDaysArray = timerObject["repeat"]["days"].as<JsonArray>();
-      for (uint k = 0; k < repeatDaysArray.size() && k < 7; k++) {
-        relays[i].timers[j].repeatDays[k] = repeatDaysArray[k].as<String>();
-      }
-      relays[i].timerCount++;
-    }
+    // JsonArray timersArray = relayObject["timers"].as<JsonArray>();
+    // for (uint j = 0; j < timersArray.size() && j < 5; j++) {
+    //   JsonObject timerObject = timersArray[j];
+    //   relays[i].timers[j].id = timerObject["id"];
+    //   relays[i].timers[j].action = timerObject["action"].as<String>();
+    //   relays[i].timers[j].time = timerObject["time"].as<String>();
+    //   relays[i].timers[j].enabled = timerObject["enabled"];
+
+    //   JsonArray repeatDaysArray = timerObject["repeat"]["days"].as<JsonArray>();
+    //   for (uint k = 0; k < repeatDaysArray.size() && k < 7; k++) {
+    //     relays[i].timers[j].repeatDays[k] = repeatDaysArray[k].as<String>();
+    //   }
+    //   relays[i].timerCount++;
+    // }
   }
 
   updateRelays();
@@ -250,8 +268,18 @@ void parseJSON(const String &jsonString) {
 // Relais aktualisieren
 void updateRelays() {
   for (int i = 0; i < RELAY_COUNT; i++) {
+
+
+
     if (relays[i].mode == "manual") {
-      digitalWrite(relayPins[i], relays[i].state == "on" ? HIGH : LOW);
+
+    Serial.println( relays[i].id );
+    Serial.println( relays[i].name );
+    Serial.print( (relays[i].state == "on") );
+    Serial.println( relays[i].state );
+    Serial.println( relays[i].mode );
+    
+      digitalWrite( 2, (relays[i].state == "on"));
     }
   }
 }
@@ -289,7 +317,7 @@ void processTimers()
         }
       }
 
-      digitalWrite( relayPins[ relays[i].id ],iTargetRelayState ); 
+      //digitalWrite( relayPins[ relays[i].id ],iTargetRelayState ); 
       
     //   relays[i].id = relayObject["id"];
     // relays[i].name = relayObject["name"].as<String>();
