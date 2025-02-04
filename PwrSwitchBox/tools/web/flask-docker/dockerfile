@@ -1,0 +1,17 @@
+# Verwende ein leichtes Python-Image als Basis
+FROM python:3.9-slim
+
+# Setze das Arbeitsverzeichnis im Container
+WORKDIR /app
+
+# Kopiere die benötigten Dateien in den Container
+COPY app.py requirements.txt /app/
+
+# Installiere die Abhängigkeiten
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Exponiere Port 5000
+EXPOSE 5000
+
+# Starte den Flask-Server, wenn der Container läuft
+CMD ["python", "app.py"]
