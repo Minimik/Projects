@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relais Steuerung</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .4s; border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .relay-container { margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <h1>ESP8266 Relais Steuerung</h1>
+    
+    <div id="relay-list">
+        {% for relay in relays %}
+        <div class="relay-container">
+            <label class="switch">
+                <input type="checkbox" id="relay{{ relay.id }}" {% if relay.state == 'on' %}checked{% endif %}
+                    onchange="toggleRelay({{ relay.id }})">
+                <span class="slider"></span>
+            </label>
+            <span>{{ relay.name }} ({{ relay.mode }})</span>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        var socket = io.connect("http://" + document.domain + ":" + location.port);
+
+        function toggleRelay(relayId) {
+            socket.emit("toggle_relay", { relay_id: relayId });
+        }
+
+        // Empfange Updates und aktualisiere Relais-Zustände
+        socket.on("update_relays", function(data) {
+            data.relays.forEach(relay => {
+                document.getElementById("relay" + relay.id).checked = (relay.state === "on");
+            });
+        });
+    </script>
+</body>
+</html>
