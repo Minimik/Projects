@@ -48,6 +48,9 @@ try:
         nachricht = input("Gib eine Nachricht ein, die gesendet werden soll (oder 'exit' zum Beenden): ")
         if nachricht.lower() == 'exit':
             break
+        
+        if nachricht.lower() == 'ping':
+            publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
         elif nachricht == "":
             relayState = "on" if relayState == "off" else "off"

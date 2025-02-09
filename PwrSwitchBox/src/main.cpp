@@ -143,6 +143,7 @@ void processTimers(  uint8_t nmbRelay );
 //bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
 //String getCurrentDay();
 void prepareJSON( void );
+void prepareJSON( void );
 
 // Hilfsfunktionen
 String payloadToString(byte* payload, unsigned int length);
@@ -478,8 +479,7 @@ void parseJSON(const String &jsonString) {
   {
     JsonObject relayObject = relaysArray[i];
     
-    int idx = ((int)(relayObject["id"]));
-    
+
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
@@ -526,6 +526,39 @@ void parseJSON(const String &jsonString) {
 void prepareJSON( void )
 {
   Serial.println( "prepareJSON" );
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson( doc, jsonTemplate );
+
+  if (error) {
+    Serial.println("JSON-Parsing fehlgeschlagen!");
+    return;
+  }
+
+  JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
+  {
+    
+    doc["relays"][0]["id"] = relays[i].id;
+    doc["relays"][0]["state"] = relays[i].state;
+    doc["relays"][0]["name"] = relays[i].name;
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+    Serial.println( jsonString.c_str() );
+
+    if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
+    {
+      Serial.println( "couldn't publish the string!");
+    }    
+  }
+
+
+}
+
+// Relais aktualisieren
+void updateRelays() {
+  for (int i = 0; i < RELAY_COUNT; i++) {
 
   JsonDocument doc;
   DeserializationError error = deserializeJson( doc, jsonTemplate );
