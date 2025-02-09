@@ -7,8 +7,9 @@ app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 MQTT_BROKER = "192.168.178.95"
-MQTT_TOPIC_SUB = "home/relays"
-MQTT_TOPIC_PUB = "home/relays"
+MQTT_TOPIC_RELAY_SUB = "home/relays"
+MQTT_TOPIC_RELAY_PUB = "home/relays"
+MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
 # Relais-Zustände als JSON
 relays = [
@@ -23,7 +24,7 @@ mqtt_client = mqtt.Client()
 
 def on_connect(client, userdata, flags, rc):
     print("MQTT verbunden!")
-    client.subscribe(MQTT_TOPIC_SUB)
+    client.subscribe(MQTT_TOPIC_RELAY_SUB)
 
 def on_message(client, userdata, msg):
     """Wird aufgerufen, wenn eine MQTT-Nachricht empfangen wird"""
@@ -65,7 +66,7 @@ def toggle_relay(data):
     for relay in relays:
         if relay["id"] == relay_id:
             relay["state"] = "on" if relay["state"] == "off" else "off"
-            mqtt_client.publish(MQTT_TOPIC_PUB, f"{relay_id},{1 if relay['state'] == 'on' else 0}")
+            mqtt_client.publish(MQTT_TOPIC_RELAY_PUB, f"{relay_id},{1 if relay['state'] == 'on' else 0}")
     
     # Aktualisierte Relais-Zustände an alle Clients senden
     socketio.emit("update_relays", {"relays": relays})

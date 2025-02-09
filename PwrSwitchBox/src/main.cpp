@@ -17,6 +17,49 @@ const int mqttPort = 1883;
 const char* mqttUser = "mqtt_username";
 const char* mqttPassword = "mqtt_password";
 
+#define MQTT_TOPIC_RELAY_SUB "home/relays"
+#define MQTT_TOPIC_RELAY_PUB "home/relays"
+#define MQTT_TOPIC_RELAYSTATEUPDATE_PUB "home/relaysstate"
+const char* jsonTemplate = R"json(
+{
+  "relays": [
+      {
+          "id": 1,
+          "name": "Relay1",
+          "state": "off",
+          "mode": "manual",
+          "timers": []
+      }
+  ]
+}
+)json";
+//       ,
+//       {
+//           "id": 2,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       },
+//       {
+//           "id": 3,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       },
+//       {
+//           "id": 4,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       }
+//   ]
+// }
+// )json";
+
+
 // Relais-Pins
 const int relayPins[] = { D1, D2, D3, D4 };
 const int RELAY_COUNT = 4;
@@ -73,6 +116,7 @@ void updateRelays();
 void processTimers();
 bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
 String getCurrentDay();
+void prepareJSON( void );
 
 // Hilfsfunktionen
 String payloadToString(byte* payload, unsigned int length);
@@ -83,6 +127,12 @@ void setup() {
 
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
+
+    relays[i].id = i + 1;
+    relays[i].state = "on";
+    relays[i].name = String("Relay") + String(i+1);
+    relays[i].mode = "manual";
+
     pinMode(relayPins[i], OUTPUT);
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
@@ -170,7 +220,7 @@ void setupOTA() {
     Serial.println("\nEnde");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    // Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
     Serial.printf("Error[%u]: ", error);
@@ -197,6 +247,7 @@ void connectMQTT() {
     if (mqttClient.connect("ESP8266Client", mqttUser, mqttPassword)) {
       Serial.println(" verbunden!");
       mqttClient.subscribe("home/relays"); // MQTT-Topic für Steuerung
+      mqttClient.subscribe( MQTT_TOPIC_RELAYSTATEUPDATE_PUB );
     } else {
       Serial.print(" fehlgeschlagen (rc=");
       Serial.print(mqttClient.state());
@@ -214,9 +265,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print(": ");
   Serial.println(message);
 
-  if (String(topic) == "home/relays") {
+  String sTopic( topic );
+  if ( sTopic == MQTT_TOPIC_RELAY_SUB ) {
     parseJSON(message);
     updateRelays();    
+  }
+  else if ( sTopic == MQTT_TOPIC_RELAYSTATEUPDATE_PUB )
+  {
+    prepareJSON();
   }
 }
 
@@ -237,7 +293,9 @@ void parseJSON(const String &jsonString) {
   {
     JsonObject relayObject = relaysArray[i];
     
-    int idx = (int)(relayObject["id"]);
+    int idx = ((int)(relayObject["id"])) - 1;
+    
+
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
@@ -265,6 +323,40 @@ void parseJSON(const String &jsonString) {
   updateRelays();
 }
 
+// prepare current relays state to JSON/MQTT payload
+void prepareJSON( void )
+{
+  Serial.println( "prepareJSON" );
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson( doc, jsonTemplate );
+
+  if (error) {
+    Serial.println("JSON-Parsing fehlgeschlagen!");
+    return;
+  }
+
+  JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
+  {
+    
+    doc["relays"][0]["id"] = relays[i].id;
+    doc["relays"][0]["state"] = relays[i].state;
+    doc["relays"][0]["name"] = relays[i].name;
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+    Serial.println( jsonString.c_str() );
+
+    if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
+    {
+      Serial.println( "couldn't publish the string!");
+    }    
+  }
+
+
+}
+
 // Relais aktualisieren
 void updateRelays() {
   for (int i = 0; i < RELAY_COUNT; i++) {
@@ -273,11 +365,11 @@ void updateRelays() {
 
     if (relays[i].mode == "manual") {
 
-    Serial.println( relays[i].id );
-    Serial.println( relays[i].name );
-    Serial.print( (relays[i].state == "on") );
-    Serial.println( relays[i].state );
-    Serial.println( relays[i].mode );
+    // Serial.println( relays[i].id );
+    // Serial.println( relays[i].name );
+    // Serial.print( (relays[i].state == "on") );
+    // Serial.println( relays[i].state );
+    // Serial.println( relays[i].mode );
     
       digitalWrite( 2, (relays[i].state == "on"));
     }
