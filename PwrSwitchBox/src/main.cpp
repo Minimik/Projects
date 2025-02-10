@@ -371,7 +371,7 @@ void updateRelays() {
     // Serial.println( relays[i].state );
     // Serial.println( relays[i].mode );
     
-      digitalWrite( 2, (relays[i].state == "on"));
+      digitalWrite( relayPins[i], (relays[i].state == "on"));
     }
   }
 }
