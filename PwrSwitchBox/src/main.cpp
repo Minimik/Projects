@@ -576,6 +576,7 @@ void updateRelays() {
     doc["relays"][0]["state"] = relays[i].state;
     doc["relays"][0]["name"] = relays[i].name;
 
+    //  digitalWrite( 2, (relays[i].state == "on"));
     for ( int j = 0; j < TIMER_PER_RELAY; j++)
     {
       doc["relays"][0]["timers"][j]["active"] = relays[i].timers[j].active;
