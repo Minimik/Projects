@@ -9,6 +9,8 @@
 #include <WiFiManager.h>
 #include <LittleFS.h>
 
+
+
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
@@ -173,7 +175,7 @@ void setup() {
 
   Serial.begin(115200);
 
-//  setupWifiManager( );
+  setupWifiManager( );
 
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
@@ -251,6 +253,9 @@ void loop() {
   //  delay( 1000 );
 }
 
+//int main(  )
+//{
+//  setup();
 // int main(  )
 // {
 //   setup();
@@ -258,6 +263,7 @@ void loop() {
 // while ( 1 )
 //   loop();
 
+//}
 // }
 
 
@@ -479,6 +485,7 @@ void parseJSON(const String &jsonString) {
   {
     JsonObject relayObject = relaysArray[i];
     
+    int idx = ((int)(relayObject["id"]));
 
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
