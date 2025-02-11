@@ -13,10 +13,10 @@ MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
 # Relais-Zustände als JSON
 relays = [
-    {"id": 1, "name": "Relay1", "state": "off", "mode": "manual", "timers": []},
-    {"id": 2, "name": "Relay2", "state": "off", "mode": "manual", "timers": []},
-    {"id": 3, "name": "Relay3", "state": "off", "mode": "manual", "timers": []},
-    {"id": 4, "name": "Relay4", "state": "off", "mode": "manual", "timers": []}
+    {"id": 0, "name": "Relay1", "state": "off", "mode": "manual", "timers": []},
+    {"id": 1, "name": "Relay2", "state": "off", "mode": "manual", "timers": []},
+    {"id": 2, "name": "Relay3", "state": "off", "mode": "manual", "timers": []},
+    {"id": 3, "name": "Relay4", "state": "off", "mode": "manual", "timers": []}
 ]
 
 # MQTT Client einrichten
@@ -27,27 +27,18 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(MQTT_TOPIC_RELAY_SUB)
 
 def on_message(client, userdata, msg):
-    """Wird aufgerufen, wenn eine MQTT-Nachricht empfangen wird"""
-    a = msg.payload.decode()
-    data = json.loads( msg.payload.decode() )
+    """Empfängt neue Relais-Zustände und aktualisiert die Webseite"""
+    global relays
+    try:
+        new_data = json.loads(msg.payload.decode())  # JSON-String in Python-Dict umwandeln
+        relays = new_data["relays"]  # Neue Zustände übernehmen
+        print("Relais-Status aktualisiert:", relays)
 
-    # Zugriff auf Werte
-    print("Anzahl der Relais:", len(data["relays"]))
-    
-    #relay_id, state = map(int, msg.payload.decode().split(","))  # z.B. "3,1"
-    first_relay = data["relays"][0]
-    relay_id = int(first_relay["id"])
-    state = first_relay["state"]
-
-    for relay in relays:
-        if relay["id"] == relay_id:
-            if state == "on":
-                relay["state"] = "on"
-            else:
-                relay["state"] = "off"
-
-    # Sende neuen Zustand an alle verbundenen Clients
-    socketio.emit("update_relays", {"relays": relays})
+        # Aktualisierte Zustände an alle Clients senden
+        socketio.emit("update_relays", {"relays": relays})
+		
+    except json.JSONDecodeError:
+        print("Fehler: Ungültiges JSON empfangen!")
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
@@ -71,5 +62,10 @@ def toggle_relay(data):
     # Aktualisierte Relais-Zustände an alle Clients senden
     socketio.emit("update_relays", {"relays": relays})
 
+@socketio.on("request_update")
+def request_update():
+    """Sendet eine Anfrage an MQTT, um den aktuellen Status abzufragen"""
+    print("MQTT-Update angefordert")
+    mqtt_client.publish(MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "update")
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
