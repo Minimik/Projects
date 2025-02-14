@@ -11,9 +11,11 @@
 
 
 
+
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
+
 
 // MQTT-Server
 const char* mqttServer = "192.168.178.95";
@@ -96,6 +98,7 @@ typedef enum enmDayOfWeek {
   sunday = 0x40
 } eDoW;
 
+
 // Timer-Datenstruktur
 // Timer id '-1' means not set; ignore this Timer
 struct Timer {
@@ -112,6 +115,11 @@ struct Timer {
 
 time_t Timer::parseISO8601( const char* iso8601 = NULL )
 {
+  // struct tm t = {};
+  // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
+  // {
+  //     return mktime( &t );  // Konvertiere zu time_t
+  // }
   // struct tm t = {};
   // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
   // {
@@ -168,6 +176,8 @@ void restoreRelayConfigFromFlash()
   file.close();
 }
 
+
+
 void setup() {
 
   Serial.begin(115200);
@@ -188,6 +198,12 @@ void setup() {
     }
 
     pinMode( relayPins[i], OUTPUT );
+    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
+    {
+      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
+    }
+
+    pinMode( relayPins[i], OUTPUT );
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -201,9 +217,16 @@ void setup() {
   // NTP starten
   timeClient.begin();
   // timeClient.getDay();
+  // timeClient.getDay();
 
   // OTA-Setup
   setupOTA();
+
+  // 1. LittleFS starten
+  if (!LittleFS.begin()) {
+    Serial.println("Fehler beim Mounten von LittleFS!");
+    return;
+  }
 
   // 1. LittleFS starten
   if (!LittleFS.begin()) {
@@ -403,6 +426,7 @@ void setupOTA() {
       Serial.println("End Failed");
     }
   });
+
   ArduinoOTA.begin();
   Serial.println("OTA ready");
 }
