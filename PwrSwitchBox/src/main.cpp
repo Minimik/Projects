@@ -11,7 +11,6 @@
 
 
 
-
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
@@ -109,17 +108,18 @@ struct Timer {
   byte days;          // bit is set which day of the week the time shall be used
   // String repeatDays[7];
   // String interval;
+  byte active;
+  short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
+  short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
+  byte days;          // bit is set which day of the week the time shall be used
+  // String repeatDays[7];
+  // String interval;
 
   time_t parseISO8601(const char* iso8601 /*= NULL*/ );
 };
 
 time_t Timer::parseISO8601( const char* iso8601 = NULL )
 {
-  // struct tm t = {};
-  // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
-  // {
-  //     return mktime( &t );  // Konvertiere zu time_t
-  // }
   // struct tm t = {};
   // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
   // {
@@ -176,7 +176,25 @@ void restoreRelayConfigFromFlash()
   file.close();
 }
 
+void restoreRelayConfigFromFlash()
+{
+  File file = LittleFS.open("/config.bin", "rb");
+  if (!file) {
+    Serial.println("Fehler beim Öffnen der Datei!");
+    return;
+  }
 
+  for (int i = 0; i < RELAY_COUNT; i++) {
+
+    relays;
+    file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
+
+    pinMode( relayPins[i], OUTPUT );
+    digitalWrite( relayPins[i], LOW ); // Relais initial aus
+  }
+
+  file.close();
+}
 
 void setup() {
 
@@ -373,6 +391,7 @@ void setupWifiManager()
   if ( digitalRead(TRIGGER_PIN) == LOW ) {
     WiFiManager wifiManager;
     res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
+    res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
   }
   else
   {
@@ -527,6 +546,7 @@ void prepareJSON( void )
   }
 
   //JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
   for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
   {
     
@@ -588,6 +608,7 @@ void processTimers()
 
       for ( uint t = 0; t < TIMER_PER_RELAY && relays[i].timers[t].id != -1; t++ )
       {
+        if ( relays[i].timers[t].active != 0 )
         if ( relays[i].timers[t].active != 0 )
         {
           
