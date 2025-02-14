@@ -7,12 +7,13 @@
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
 #include <WiFiManager.h>
+#include <LittleFS.h>
 
 
 
 // WiFi-Zugangsdaten
-const char* ssid = "Discovery Channel";
-const char* password = "466c697069";
+String ssid = "Discovery Channel";
+String password = "466c697069";
 
 // MQTT-Server
 const char* mqttServer = "192.168.178.95";
@@ -84,26 +85,38 @@ PubSubClient mqttClient(espClient);
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Zeitzone +1 Stunde, Aktualisierung alle 60 Sekunden
 
+
+typedef enum enmDayOfWeek {
+  monday = 0x01,
+  tuesday = 0x02,
+  wednesday = 0x04,
+  thursday = 0x08,
+  friday = 0x10,
+  saturday = 0x20,
+  sunday = 0x40
+} eDoW;
+
 // Timer-Datenstruktur
 // Timer id '-1' means not set; ignore this Timer
 struct Timer {
   int id;
-  String action;
-  String time;
-  bool enabled;
-  String repeatDays[7];
-  String interval;
+  byte active;
+  short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
+  short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
+  byte days;          // bit is set which day of the week the time shall be used
+  // String repeatDays[7];
+  // String interval;
 
   time_t parseISO8601(const char* iso8601 /*= NULL*/ );
 };
 
 time_t Timer::parseISO8601( const char* iso8601 = NULL )
 {
-  struct tm t = {};
-  if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
-  {
-      return mktime( &t );  // Konvertiere zu time_t
-  }
+  // struct tm t = {};
+  // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
+  // {
+  //     return mktime( &t );  // Konvertiere zu time_t
+  // }
   return 0;  // Fehlerfall
 }
 
@@ -114,7 +127,6 @@ struct Relay {
   String state;
   String mode;
   Timer timers[TIMER_PER_RELAY]; // Maximal 5 Timer pro Relais
-  int timerCount;
 };
 
 // Relais-Array
@@ -136,6 +148,26 @@ void prepareJSON( void );
 String payloadToString(byte* payload, unsigned int length);
 void setupOTA();
 
+void restoreRelayConfigFromFlash()
+{
+  File file = LittleFS.open("/config.bin", "rb");
+  if (!file) {
+    Serial.println("Fehler beim Öffnen der Datei!");
+    return;
+  }
+
+  for (int i = 0; i < RELAY_COUNT; i++) {
+
+    relays;
+    file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
+
+    pinMode( relayPins[i], OUTPUT );
+    digitalWrite( relayPins[i], LOW ); // Relais initial aus
+  }
+
+  file.close();
+}
+
 void setup() {
 
   Serial.begin(115200);
@@ -150,7 +182,12 @@ void setup() {
     relays[i].name = String("Relay") + String(i+1);
     relays[i].mode = "manual";
 
-    pinMode(relayPins[i], OUTPUT);
+    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
+    {
+      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
+    }
+
+    pinMode( relayPins[i], OUTPUT );
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -163,9 +200,16 @@ void setup() {
 
   // NTP starten
   timeClient.begin();
+  // timeClient.getDay();
 
   // OTA-Setup
   setupOTA();
+
+  // 1. LittleFS starten
+  if (!LittleFS.begin()) {
+    Serial.println("Fehler beim Mounten von LittleFS!");
+    return;
+  }
 
   // MQTT verbinden
   connectMQTT();
@@ -305,14 +349,14 @@ void setupWifiManager()
   // res = wm.autoConnect("AutoConnectAP"); // anonymous ap
   if ( digitalRead(TRIGGER_PIN) == LOW ) {
     WiFiManager wifiManager;
-    wifiManager.startConfigPortal( "AutoConnectAP", "password" );
+    res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
   }
   else
   {
     res = wm.autoConnect( "AutoConnectAP", "password" ); // password protected ap
   }
 
-  if(!res) {
+  if( !res ) {
     Serial.println("Failed to connect or hit timeout");
     // ESP.restart();
   } 
@@ -423,7 +467,6 @@ void parseJSON(const String &jsonString) {
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
     relays[ idx ].mode = relayObject["mode"].as<String>();
-    relays[ idx ].timerCount = 0;
 
     
 
@@ -459,7 +502,7 @@ void prepareJSON( void )
     return;
   }
 
-  JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
   for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
   {
     
@@ -513,26 +556,30 @@ String payloadToString(byte* payload, unsigned int length)
 
 void processTimers()
 {
-  for (uint i = 0; i < RELAY_COUNT; i++) {
+  for (uint i = 0; i < RELAY_COUNT; i++)
+  {
     if ( relays[i].id != -1 )
     {
       int iTargetRelayState = 0;
 
       for ( uint t = 0; t < TIMER_PER_RELAY && relays[i].timers[t].id != -1; t++ )
       {
-        if ( relays[i].timers[t].enabled )
+        if ( relays[i].timers[t].active != 0 )
         {
-          time_t tmTimer = relays[i].timers[t].parseISO8601();
+          
+          // time_t tmTimer = relays[i].timers[t].parseISO8601();
           time_t ntpTime = timeClient.getEpochTime();
 
-          if ( tmTimer > ntpTime )
+          struct tm* localTime = localtime( &ntpTime );
+          if (    ( ( localTime->tm_hour >= (relays[i].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[i].timers[t].sStarttime ) ) & 0xFF )
+              &&  ( ( localTime->tm_hour <= (relays[i].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[i].timers[t].sStoptime ) ) & 0xFF ) ) 
           {
-            iTargetRelayState = ( NULL != strcasestr( relays[i].timers[t].action.c_str(), "on" ) );
+            iTargetRelayState = ( ( (2 << localTime->tm_wday) & relays[i].timers[t].days ) != 0 )? 1 : 0;
           }
         }
       }
 
-      //digitalWrite( relayPins[ relays[i].id ],iTargetRelayState ); 
+      digitalWrite( relayPins[ relays[i].id ], iTargetRelayState );
       
     //   relays[i].id = relayObject["id"];
     // relays[i].name = relayObject["name"].as<String>();
