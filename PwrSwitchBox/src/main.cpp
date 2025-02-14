@@ -8,10 +8,13 @@
 #include <ArduinoOTA.h>
 #include <WiFiManager.h>
 #include <LittleFS.h>
+#include <LittleFS.h>
 
 
 
 // WiFi-Zugangsdaten
+String ssid = "Discovery Channel";
+String password = "466c697069";
 String ssid = "Discovery Channel";
 String password = "466c697069";
 
@@ -96,10 +99,27 @@ typedef enum enmDayOfWeek {
   sunday = 0x40
 } eDoW;
 
+
+typedef enum enmDayOfWeek {
+  monday = 0x01,
+  tuesday = 0x02,
+  wednesday = 0x04,
+  thursday = 0x08,
+  friday = 0x10,
+  saturday = 0x20,
+  sunday = 0x40
+} eDoW;
+
 // Timer-Datenstruktur
 // Timer id '-1' means not set; ignore this Timer
 struct Timer {
   int id;
+  byte active;
+  short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
+  short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
+  byte days;          // bit is set which day of the week the time shall be used
+  // String repeatDays[7];
+  // String interval;
   byte active;
   short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
   short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
@@ -112,6 +132,11 @@ struct Timer {
 
 time_t Timer::parseISO8601( const char* iso8601 = NULL )
 {
+  // struct tm t = {};
+  // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
+  // {
+  //     return mktime( &t );  // Konvertiere zu time_t
+  // }
   // struct tm t = {};
   // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
   // {
@@ -168,6 +193,26 @@ void restoreRelayConfigFromFlash()
   file.close();
 }
 
+void restoreRelayConfigFromFlash()
+{
+  File file = LittleFS.open("/config.bin", "rb");
+  if (!file) {
+    Serial.println("Fehler beim Öffnen der Datei!");
+    return;
+  }
+
+  for (int i = 0; i < RELAY_COUNT; i++) {
+
+    relays;
+    file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
+
+    pinMode( relayPins[i], OUTPUT );
+    digitalWrite( relayPins[i], LOW ); // Relais initial aus
+  }
+
+  file.close();
+}
+
 void setup() {
 
   Serial.begin(115200);
@@ -188,6 +233,12 @@ void setup() {
     }
 
     pinMode( relayPins[i], OUTPUT );
+    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
+    {
+      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
+    }
+
+    pinMode( relayPins[i], OUTPUT );
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -201,9 +252,16 @@ void setup() {
   // NTP starten
   timeClient.begin();
   // timeClient.getDay();
+  // timeClient.getDay();
 
   // OTA-Setup
   setupOTA();
+
+  // 1. LittleFS starten
+  if (!LittleFS.begin()) {
+    Serial.println("Fehler beim Mounten von LittleFS!");
+    return;
+  }
 
   // 1. LittleFS starten
   if (!LittleFS.begin()) {
@@ -350,12 +408,14 @@ void setupWifiManager()
   if ( digitalRead(TRIGGER_PIN) == LOW ) {
     WiFiManager wifiManager;
     res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
+    res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
   }
   else
   {
     res = wm.autoConnect( "AutoConnectAP", "password" ); // password protected ap
   }
 
+  if( !res ) {
   if( !res ) {
     Serial.println("Failed to connect or hit timeout");
     // ESP.restart();
@@ -503,6 +563,7 @@ void prepareJSON( void )
   }
 
   //JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
   for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
   {
     
@@ -564,6 +625,7 @@ void processTimers()
 
       for ( uint t = 0; t < TIMER_PER_RELAY && relays[i].timers[t].id != -1; t++ )
       {
+        if ( relays[i].timers[t].active != 0 )
         if ( relays[i].timers[t].active != 0 )
         {
           
