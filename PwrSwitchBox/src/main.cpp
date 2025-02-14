@@ -191,12 +191,6 @@ void setup() {
     }
 
 
-    pinMode( relayPins[i], OUTPUT );
-    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
-    {
-      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
-    }
-
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -538,7 +532,7 @@ void prepareJSON( void )
     return;
   }
 
-  JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
   for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
   {
     
