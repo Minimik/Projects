@@ -5,6 +5,7 @@ BROKER = "192.168.178.95"  # Ersetze durch die Adresse deines Brokers
 PORT = 1883                   # Standardport für MQTT
 SUB_TOPIC = "home/relays"  # Thema, auf das abonniert wird
 PUB_TOPIC = "home/relays"    # Thema, auf das publiziert wird
+MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
 # Callback, wenn die Verbindung zum Broker hergestellt wurde
 def on_connect(client, userdata, flags, rc):
@@ -13,6 +14,7 @@ def on_connect(client, userdata, flags, rc):
         # Erfolgreich verbunden
         print("Erfolgreich verbunden! Abonniere:", SUB_TOPIC)
         client.subscribe(SUB_TOPIC)
+        client.subscribe( MQTT_TOPIC_RELAYSTATEUPDATE_PUB )
     else:
         print("Verbindung fehlgeschlagen.")
 
@@ -39,16 +41,22 @@ def publish_message(client, topic, message):
 client.loop_start()
 
 try:
+    relayState = "off"
     while True:
         # Beispiel: Nachricht senden
         nachricht = input("Gib eine Nachricht ein, die gesendet werden soll (oder 'exit' zum Beenden): ")
         if nachricht.lower() == 'exit':
             break
+        
+        if nachricht.lower() == 'ping':
+            publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
-        if nachricht == "":
-            nachricht = '{"relays":[{"id":3,"name":"Relay1","state":"off","mode":"manual","timers":[]}] }' #{"id":1,"action":"on","time":"2025-01-23T08:00:00","repeat":{"days": ["Monday", "Wednesday", "Friday"],"interval": "weekly"}}
+        elif nachricht == "":
+            relayState = "on" if relayState == "off" else "off"
+            nachricht = '{"relays":[{"id":3,"name":"Relay1","state":"' + relayState + '","mode":"manual","timers":[]}] }' #{"id":1,"action":"on","time":"2025-01-23T08:00:00","repeat":{"days": ["Monday", "Wednesday", "Friday"],"interval": "weekly"}}
    
-        publish_message(client, PUB_TOPIC, nachricht)
+            publish_message(client, PUB_TOPIC, nachricht)
+
 except KeyboardInterrupt:
     print("Programm beendet.")
 finally:

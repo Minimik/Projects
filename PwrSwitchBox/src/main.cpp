@@ -6,6 +6,9 @@
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include <ArduinoOTA.h>
+#include <WiFiManager.h>
+
+
 
 // WiFi-Zugangsdaten
 const char* ssid = "Discovery Channel";
@@ -17,10 +20,63 @@ const int mqttPort = 1883;
 const char* mqttUser = "mqtt_username";
 const char* mqttPassword = "mqtt_password";
 
+#define MQTT_TOPIC_RELAY_SUB "home/relays"
+#define MQTT_TOPIC_RELAY_PUB "home/relays"
+#define MQTT_TOPIC_RELAYSTATEUPDATE_PUB "home/relaysstate"
+
+const char* jsonTemplate = R"json(
+{
+  "relays": [
+      {
+          "id": 0,
+          "name": "Relay1",
+          "state": "off",
+          "mode": "manual",
+          "timers": []
+      }
+  ]
+}
+)json";
+//       ,
+//       {
+//           "id": 2,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       },
+//       {
+//           "id": 3,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       },
+//       {
+//           "id": 4,
+//           "name": "Relay1",
+//           "state": "off",
+//           "mode": "manual",
+//           "timers": []
+//       }
+//   ]
+// }
+// )json";
+
+
 // Relais-Pins
 const int relayPins[] = { D1, D2, D3, D4 };
 const int RELAY_COUNT = 4;
 const int TIMER_PER_RELAY = 5;
+
+#define TRIGGER_PIN 12
+
+// wifimanager can run in a blocking mode or a non blocking mode
+// Be sure to know how to process loops with no delay() if using non blocking
+bool wm_nonblocking = false; // change to true to use non blocking
+
+WiFiManager wm; // global wm instance
+WiFiManagerParameter custom_field; // global param ( for non blocking w params )
 
 // MQTT-Client und NTP-Client
 WiFiClient espClient;
@@ -66,23 +122,34 @@ Relay relays[RELAY_COUNT];
 
 // Prototypen
 void setupWiFi();
+void setupWifiManager();
 void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void parseJSON(const String &jsonString);
 void updateRelays();
 void processTimers();
-bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
-String getCurrentDay();
+//bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
+//String getCurrentDay();
+void prepareJSON( void );
 
 // Hilfsfunktionen
 String payloadToString(byte* payload, unsigned int length);
 void setupOTA();
 
 void setup() {
+
   Serial.begin(115200);
+
+  setupWifiManager( );
 
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
+
+    relays[i].id = i + 1;
+    relays[i].state = "on";
+    relays[i].name = String("Relay") + String(i+1);
+    relays[i].mode = "manual";
+
     pinMode(relayPins[i], OUTPUT);
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
@@ -132,6 +199,9 @@ void loop() {
   // delay( 1000 );
 }
 
+//int main(  )
+//{
+//  setup();
 // int main(  )
 // {
 //   setup();
@@ -139,11 +209,14 @@ void loop() {
 // while ( 1 )
 //   loop();
 
+//}
 // }
 
 
 // WLAN-Verbindung herstellen
 void setupWiFi() {
+  WiFi.disconnect();
+
   Serial.print("Verbindung zu WiFi...");
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -152,7 +225,107 @@ void setupWiFi() {
   }
   Serial.println( WiFi.localIP().toString() );											  
   Serial.println(" verbunden!");
+  Serial.println("IP-Adresse: " + WiFi.localIP().toString());
 }
+
+String getParam(String name){
+  //read parameter from server, for customhmtl input
+  String value;
+  if(wm.server->hasArg(name)) {
+    value = wm.server->arg(name);
+  }
+
+  return value;
+}
+
+void saveParamCallback(){
+  Serial.println("[CALLBACK] saveParamCallback fired");
+  Serial.println("PARAM customfieldid = " + getParam("customfieldid"));
+}
+
+void setupWifiManager()
+{
+
+  WiFi.mode( WIFI_STA ); // explicitly set mode, esp defaults to STA+AP  
+  
+  pinMode(TRIGGER_PIN, INPUT);
+  wm.resetSettings(); // wipe settings
+
+  if( wm_nonblocking )
+    wm.setConfigPortalBlocking( false );
+
+  // add a custom input field
+  int customFieldLength = 40;
+
+
+  // new (&custom_field) WiFiManagerParameter("customfieldid", "Custom Field Label", "Custom Field Value", customFieldLength,"placeholder=\"Custom Field Placeholder\"");
+  
+  // test custom html input type(checkbox)
+  // new (&custom_field) WiFiManagerParameter("customfieldid", "Custom Field Label", "Custom Field Value", customFieldLength,"placeholder=\"Custom Field Placeholder\" type=\"checkbox\""); // custom html type
+  
+  // test custom html(radio)
+  const char* custom_radio_str = "<br/><label for='customfieldid'>Custom Field Label</label><input type='radio' name='customfieldid' value='1' checked> One<br><input type='radio' name='customfieldid' value='2'> Two<br><input type='radio' name='customfieldid' value='3'> Three";
+  new (&custom_field) WiFiManagerParameter( custom_radio_str ); // custom html input
+  
+  wm.addParameter( &custom_field );
+  wm.setSaveParamsCallback( saveParamCallback );
+
+  // custom menu via array or vector
+  // 
+  // menu tokens, "wifi","wifinoscan","info","param","close","sep","erase","restart","exit" (sep is seperator) (if param is in menu, params will not show up in wifi page!)
+  // const char* menu[] = {"wifi","info","param","sep","restart","exit"}; 
+  // wm.setMenu(menu,6);
+  std::vector<const char *> menu = {"wifi","info","param","sep","restart","exit"};
+  wm.setMenu( menu );
+
+  // set dark theme
+  wm.setClass( "invert" );
+
+
+  //set static ip
+  // wm.setSTAStaticIPConfig(IPAddress(10,0,1,99), IPAddress(10,0,1,1), IPAddress(255,255,255,0)); // set static ip,gw,sn
+  // wm.setShowStaticFields(true); // force show static ip fields
+  // wm.setShowDnsFields(true);    // force show dns field always
+
+  // wm.setConnectTimeout(20); // how long to try to connect for before continuing
+  wm.setConfigPortalTimeout(30); // auto close configportal after n seconds
+  // wm.setCaptivePortalEnable(false); // disable captive portal redirection
+  // wm.setAPClientCheck(true); // avoid timeout if client connected to softap
+
+  // wifi scan settings
+  // wm.setRemoveDuplicateAPs(false); // do not remove duplicate ap names (true)
+  // wm.setMinimumSignalQuality(20);  // set min RSSI (percentage) to show in scans, null = 8%
+  // wm.setShowInfoErase(false);      // do not show erase button on info page
+  // wm.setScanDispPerc(true);       // show RSSI as percentage not graph icons
+  
+  // wm.setBreakAfterConfig(true);   // always exit configportal even if wifi save fails
+
+  bool res;
+  // res = wm.autoConnect(); // auto generated AP name from chipid
+  // res = wm.autoConnect("AutoConnectAP"); // anonymous ap
+  if ( digitalRead(TRIGGER_PIN) == LOW ) {
+    WiFiManager wifiManager;
+    wifiManager.startConfigPortal( "AutoConnectAP", "password" );
+  }
+  else
+  {
+    res = wm.autoConnect( "AutoConnectAP", "password" ); // password protected ap
+  }
+
+  if(!res) {
+    Serial.println("Failed to connect or hit timeout");
+    // ESP.restart();
+  } 
+  else {
+    //if you get here you have connected to the WiFi    
+    Serial.println("connected...yeey :)");
+    ssid = wm.getWiFiSSID();
+    password = wm.getWiFiPass();
+  
+  }
+}
+
+
 
 // OTA konfigurieren
 void setupOTA() {
@@ -170,7 +343,7 @@ void setupOTA() {
     Serial.println("\nEnde");
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
   });
   ArduinoOTA.onError([](ota_error_t error) {
     Serial.printf("Error[%u]: ", error);
@@ -197,6 +370,7 @@ void connectMQTT() {
     if (mqttClient.connect("ESP8266Client", mqttUser, mqttPassword)) {
       Serial.println(" verbunden!");
       mqttClient.subscribe("home/relays"); // MQTT-Topic für Steuerung
+      mqttClient.subscribe( MQTT_TOPIC_RELAYSTATEUPDATE_PUB );
     } else {
       Serial.print(" fehlgeschlagen (rc=");
       Serial.print(mqttClient.state());
@@ -214,9 +388,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print(": ");
   Serial.println(message);
 
-  if (String(topic) == "home/relays") {
+  String sTopic( topic );
+  if ( sTopic == MQTT_TOPIC_RELAY_SUB ) {
     parseJSON(message);
     updateRelays();    
+  }
+  else if ( sTopic == MQTT_TOPIC_RELAYSTATEUPDATE_PUB )
+  {
+    prepareJSON();
   }
 }
 
@@ -237,7 +416,9 @@ void parseJSON(const String &jsonString) {
   {
     JsonObject relayObject = relaysArray[i];
     
-    int idx = (int)(relayObject["id"]);
+    int idx = ((int)(relayObject["id"]));
+    
+
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
@@ -265,6 +446,40 @@ void parseJSON(const String &jsonString) {
   updateRelays();
 }
 
+// prepare current relays state to JSON/MQTT payload
+void prepareJSON( void )
+{
+  Serial.println( "prepareJSON" );
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson( doc, jsonTemplate );
+
+  if (error) {
+    Serial.println("JSON-Parsing fehlgeschlagen!");
+    return;
+  }
+
+  JsonArray relaysArray = doc["relays"].as<JsonArray>();
+  for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
+  {
+    
+    doc["relays"][0]["id"] = relays[i].id;
+    doc["relays"][0]["state"] = relays[i].state;
+    doc["relays"][0]["name"] = relays[i].name;
+
+    String jsonString;
+    serializeJson(doc, jsonString);
+    Serial.println( jsonString.c_str() );
+
+    if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
+    {
+      Serial.println( "couldn't publish the string!");
+    }    
+  }
+
+
+}
+
 // Relais aktualisieren
 void updateRelays() {
   for (int i = 0; i < RELAY_COUNT; i++) {
@@ -273,13 +488,13 @@ void updateRelays() {
 
     if (relays[i].mode == "manual") {
 
-    Serial.println( relays[i].id );
-    Serial.println( relays[i].name );
-    Serial.print( (relays[i].state == "on") );
-    Serial.println( relays[i].state );
-    Serial.println( relays[i].mode );
+    // Serial.println( relays[i].id );
+    // Serial.println( relays[i].name );
+    // Serial.print( (relays[i].state == "on") );
+    // Serial.println( relays[i].state );
+    // Serial.println( relays[i].mode );
     
-      digitalWrite( 2, (relays[i].state == "on"));
+      digitalWrite( relayPins[i], (relays[i].state == "on"));
     }
   }
 }
