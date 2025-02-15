@@ -3,71 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relais Steuerung</title>
+    <title>Relais Steuerung mit Timer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; }
-        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc; transition: .4s; border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px;
-            background-color: white; transition: .4s; border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #4CAF50; }
-        input:checked + .slider:before { transform: translateX(26px); }
         .relay-container { margin-bottom: 15px; }
-
-        .update-button {
-            margin-top: 20px; padding: 10px 20px; font-size: 16px;
-            background-color: #008CBA; color: white; border: none; cursor: pointer;
+        .wizard-button {
+            padding: 5px 10px; background-color: #FF9800; color: white; border: none; cursor: pointer;
         }
-        .update-button:hover { background-color: #005f73; }
+        .wizard-button:hover { background-color: #e68900; }
 
+        /* POPUP STYLING */
+        .modal {
+            display: none; position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        .modal-content {
+            background-color: white; margin: 10% auto; padding: 20px;
+            width: 400px; text-align: center; border-radius: 10px;
+        }
+        .btn {
+            padding: 10px; margin: 10px; border: none; cursor: pointer;
+            background-color: #008CBA; color: white;
+        }
+        .btn:hover { background-color: #005f73; }
+        .timer-table {
+            width: 100%; border-collapse: collapse; margin-top: 10px;
+        }
+        .timer-table td, .timer-table th {
+            border: 1px solid #ddd; padding: 5px;
+        }
+        .delete-button {
+            background-color: red; color: white; border: none; cursor: pointer;
+        }
+        .weekday-label { margin-right: 5px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <h1>ESP8266 Relais Steuerung</h1>
+    <h1>ESP8266 Relais Steuerung mit Timern</h1>
     
     <div id="relay-list">
         {% for relay in relays %}
         <div class="relay-container">
-            <label class="switch">
-                <input type="checkbox" id="relay{{ relay.id }}" {% if relay.state == 'on' %}checked{% endif %}
-                    onchange="toggleRelay({{ relay.id }})">
-                <span class="slider"></span>
-            </label>
             <span>{{ relay.name }} ({{ relay.mode }})</span>
+            <button class="wizard-button" onclick="openWizard({{ relay.id }})">⏳ Timer verwalten</button>
         </div>
         {% endfor %}
     </div>
 
+    <!-- Timer Wizard Popup -->
+    <div id="wizardModal" class="modal">
+        <div class="modal-content">
+            <h2>Timer für Relais <span id="wizardRelayId"></span></h2>
+            <table class="timer-table">
+                <thead>
+                    <tr><th>Startzeit</th><th>Endzeit</th><th>Tage</th><th>Aktiv</th><th>Aktion</th></tr>
+                </thead>
+                <tbody id="timerList"></tbody>
+            </table>
+            <br>
+            <input type="time" id="newStartTime"> - 
+            <input type="time" id="newEndTime">
+            <br><br>
 
-    <!-- Aktualisieren-Taster -->
-    <button class="update-button" onclick="requestUpdate()">🔄 Aktualisieren</button>
+            <!-- Wochentage Auswahl -->
+            <div id="weekdaySelector">
+                {% for day in ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"] %}
+                <label class="weekday-label">
+                    <input type="checkbox" value="{{ day }}"> {{ day }}
+                </label>
+                {% endfor %}
+            </div>
+            <br>
+            <button class="btn" onclick="addTimer()">➕ Timer hinzufügen</button>
+            <br><br>
+            <button class="btn" onclick="saveTimers()">💾 Speichern</button>
+            <button class="btn" onclick="closeWizard()">❌ Schließen</button>
+        </div>
+    </div>
 
     <script>
         var socket = io.connect("http://" + document.domain + ":" + location.port);
+        var relayTimers = {}; 
+        var currentRelayId = null;
 
-        function toggleRelay(relayId) {
-            socket.emit("toggle_relay", { relay_id: relayId });
+        function openWizard(relayId) {
+            currentRelayId = relayId;
+            document.getElementById("wizardRelayId").innerText = relayId;
+            document.getElementById("wizardModal").style.display = "block";
+            updateTimerList();
         }
 
+        function updateTimerList() {
+            let timerList = document.getElementById("timerList");
+            timerList.innerHTML = "";
 
-        function requestUpdate() {
-            console.log("MQTT-Update angefordert");
-            socket.emit("request_update");
-        }
+            let timers = relayTimers[currentRelayId] || [];
+            timers.forEach((timer, index) => {
+                let daysText = timer.days.length > 0 ? timer.days.join(", ") : "Keine";
+                let checked = timer.active ? "checked" : "";
 
-        // Empfange Updates und aktualisiere Relais-Zustände
-        socket.on("update_relays", function(data) {
-            data.relays.forEach(relay => {
-                document.getElementById("relay" + relay.id).checked = (relay.state === "on");
+                let row = `<tr>
+                    <td>${timer.start}</td>
+                    <td>${timer.end}</td>
+                    <td>${daysText}</td>
+                    <td><input type="checkbox" ${checked} onclick="toggleActive(${index})"></td>
+                    <td><button class="delete-button" onclick="removeTimer(${index})">🗑</button></td>
+                </tr>`;
+                timerList.innerHTML += row;
             });
-        });
+        }
+
+        function addTimer() {
+            let startTime = document.getElementById("newStartTime").value;
+            let endTime = document.getElementById("newEndTime").value;
+            let selectedDays = Array.from(document.querySelectorAll("#weekdaySelector input:checked"))
+                                   .map(el => el.value);
+
+            if (!startTime || !endTime) {
+                alert("Bitte Start- und Endzeit eingeben!");
+                return;
+            }
+
+            if (!relayTimers[currentRelayId]) relayTimers[currentRelayId] = [];
+            if (relayTimers[currentRelayId].length >= 6) {
+                alert("Maximal 6 Timer pro Relais erlaubt!");
+                return;
+            }
+
+            relayTimers[currentRelayId].push({ start: startTime, end: endTime, days: selectedDays, active: true });
+            updateTimerList();
+        }
+
+        function removeTimer(index) {
+            relayTimers[currentRelayId].splice(index, 1);
+            updateTimerList();
+        }
+
+        function toggleActive(index) {
+            relayTimers[currentRelayId][index].active = !relayTimers[currentRelayId][index].active;
+        }
+
+        function saveTimers() {
+            socket.emit("set_schedule", { relay_id: currentRelayId, timers: relayTimers[currentRelayId] });
+            closeWizard();
+        }
+
+        function closeWizard() {
+            document.getElementById("wizardModal").style.display = "none";
+        }
     </script>
 </body>
 </html>

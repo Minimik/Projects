@@ -11,9 +11,6 @@ MQTT_TOPIC_SUB = "home/relays"
 MQTT_TOPIC_PUB = "home/relays"
 MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
-MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
-
-
 # Relais-Zustände als JSON
 relays = [
     {"id": 0, "name": "Relay1", "state": "off", "mode": "manual", "timers": []},
@@ -56,29 +53,19 @@ mqtt_client.loop_start()
 def index():
     return render_template("index.html", relays=relays)
 
-@socketio.on("toggle_relay")
-def toggle_relay(data):
-    """Wird aufgerufen, wenn ein Benutzer ein Relais über die Webseite umschaltet"""
-    relay_id = int(data["relay_id"])
-    
-    
-    for relay in relays:
-        if relay["id"] == relay_id:
-            relay["state"] = "on" if relay["state"] == "off" else "off"
-            dictRelays = { 'relays' : [] }
-            dictRelays["relays"].append( relay )
-            mqtt_client.publish( MQTT_TOPIC_PUB, json.dumps( dictRelays ) )
-            
-    #       
-    
-    # Aktualisierte Relais-Zustände an alle Clients senden
-    socketio.emit("update_relays", {"relays": relays})
+@socketio.on("set_schedule")
+def set_schedule(data):
+    relay_id = data["relay_id"]
+    timers = data["timers"]
 
-@socketio.on("request_update")
-def request_update():
-    """Sendet eine Anfrage an MQTT, um den aktuellen Status abzufragen"""
-    print("MQTT-Update angefordert")
-    mqtt_client.publish(MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "update")
+    payload = json.dumps({
+        "relay_id": relay_id,
+        "timers": timers
+    })
+    
+    
+    mqtt_client.publish(MQTT_TOPIC_TIMER, payload)
+    print(f"Timer für Relais {relay_id}: {start_time} - {end_time}")
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
