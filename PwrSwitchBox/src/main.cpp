@@ -10,7 +10,6 @@
 #include <LittleFS.h>
 
 
-
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
@@ -284,9 +283,6 @@ void loop() {
   // delay( 1000 );
 }
 
-//int main(  )
-//{
-//  setup();
 // int main(  )
 // {
 //   setup();
@@ -294,7 +290,6 @@ void loop() {
 // while ( 1 )
 //   loop();
 
-//}
 // }
 
 
@@ -390,7 +385,6 @@ void setupWifiManager()
   // res = wm.autoConnect("AutoConnectAP"); // anonymous ap
   if ( digitalRead(TRIGGER_PIN) == LOW ) {
     WiFiManager wifiManager;
-    res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
     res = wifiManager.startConfigPortal( "AutoConnectAP", "password" );
   }
   else
@@ -546,7 +540,6 @@ void prepareJSON( void )
   }
 
   //JsonArray relaysArray = doc["relays"].as<JsonArray>();
-  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
   for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
   {
     
@@ -580,8 +573,9 @@ void updateRelays() {
     // Serial.print( (relays[i].state == "on") );
     // Serial.println( relays[i].state );
     // Serial.println( relays[i].mode );
-    
+
       digitalWrite( relayPins[i], (relays[i].state == "on"));
+
     }
   }
 }
@@ -608,7 +602,7 @@ void processTimers()
 
       for ( uint t = 0; t < TIMER_PER_RELAY && relays[i].timers[t].id != -1; t++ )
       {
-        if ( relays[i].timers[t].active != 0 )
+
         if ( relays[i].timers[t].active != 0 )
         {
           

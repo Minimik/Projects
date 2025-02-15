@@ -20,11 +20,13 @@
         input:checked + .slider { background-color: #4CAF50; }
         input:checked + .slider:before { transform: translateX(26px); }
         .relay-container { margin-bottom: 15px; }
+
         .update-button {
             margin-top: 20px; padding: 10px 20px; font-size: 16px;
             background-color: #008CBA; color: white; border: none; cursor: pointer;
         }
         .update-button:hover { background-color: #005f73; }
+
     </style>
 </head>
 <body>
@@ -43,8 +45,10 @@
         {% endfor %}
     </div>
 
+
     <!-- Aktualisieren-Taster -->
     <button class="update-button" onclick="requestUpdate()">🔄 Aktualisieren</button>
+
     <script>
         var socket = io.connect("http://" + document.domain + ":" + location.port);
 
@@ -52,10 +56,12 @@
             socket.emit("toggle_relay", { relay_id: relayId });
         }
 
+
         function requestUpdate() {
             console.log("MQTT-Update angefordert");
             socket.emit("request_update");
         }
+
         // Empfange Updates und aktualisiere Relais-Zustände
         socket.on("update_relays", function(data) {
             data.relays.forEach(relay => {

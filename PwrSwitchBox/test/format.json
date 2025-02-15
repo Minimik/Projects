@@ -1,7 +1,13 @@
 {
     "relays": [
         {
+<<<<<<< HEAD
             "id": 0,
+=======
+
+            "id": 0,
+
+>>>>>>> dev
             "name": "Relay1",
             "state": "off",
             "mode": "manual",
@@ -9,6 +15,10 @@
         },
         {
             "id": 1,
+<<<<<<< HEAD
+=======
+
+>>>>>>> dev
             "name": "Relay1",
             "state": "off",
             "mode": "manual",

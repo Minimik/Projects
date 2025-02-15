@@ -51,6 +51,10 @@ try:
         if nachricht.lower() == 'ping':
             publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
+        
+        if nachricht.lower() == 'ping':
+            publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
+
         elif nachricht == "":
             relayState = "on" if relayState == "off" else "off"
             nachricht = '{"relays":[{"id":3,"name":"Relay1","state":"' + relayState + '","mode":"manual","timers":[]}] }' #{"id":1,"action":"on","time":"2025-01-23T08:00:00","repeat":{"days": ["Monday", "Wednesday", "Friday"],"interval": "weekly"}}

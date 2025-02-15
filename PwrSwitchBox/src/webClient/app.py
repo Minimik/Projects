@@ -11,12 +11,14 @@ MQTT_TOPIC_SUB = "home/relays"
 MQTT_TOPIC_PUB = "home/relays"
 MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
+
 # Relais-Zustände als JSON
 relays = [
     {"id": 0, "name": "Relay1", "state": "off", "mode": "manual", "timers": []},
     {"id": 1, "name": "Relay2", "state": "off", "mode": "manual", "timers": []},
     {"id": 2, "name": "Relay3", "state": "off", "mode": "manual", "timers": []},
     {"id": 3, "name": "Relay4", "state": "off", "mode": "manual", "timers": []}
+
 ]
 
 # MQTT Client einrichten
