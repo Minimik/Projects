@@ -199,9 +199,7 @@ void loop() {
   // delay( 1000 );
 }
 
-//int main(  )
-//{
-//  setup();
+ main
 // int main(  )
 // {
 //   setup();
@@ -209,7 +207,6 @@ void loop() {
 // while ( 1 )
 //   loop();
 
-//}
 // }
 
 
@@ -417,8 +414,6 @@ void parseJSON(const String &jsonString) {
     JsonObject relayObject = relaysArray[i];
     
     int idx = ((int)(relayObject["id"]));
-    
-
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
@@ -488,6 +483,7 @@ void updateRelays() {
 
     if (relays[i].mode == "manual") {
 
+
     // Serial.println( relays[i].id );
     // Serial.println( relays[i].name );
     // Serial.print( (relays[i].state == "on") );
@@ -495,6 +491,7 @@ void updateRelays() {
     // Serial.println( relays[i].mode );
     
       digitalWrite( relayPins[i], (relays[i].state == "on"));
+
     }
   }
 }
