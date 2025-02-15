@@ -9,8 +9,8 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 MQTT_BROKER = "192.168.178.95"
 MQTT_TOPIC_SUB = "home/relays"
 MQTT_TOPIC_PUB = "home/relays"
-
 MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
+
 
 # Relais-Zustände als JSON
 relays = [
@@ -18,7 +18,6 @@ relays = [
     {"id": 1, "name": "Relay2", "state": "off", "mode": "manual", "timers": []},
     {"id": 2, "name": "Relay3", "state": "off", "mode": "manual", "timers": []},
     {"id": 3, "name": "Relay4", "state": "off", "mode": "manual", "timers": []}
-
 ]
 
 # MQTT Client einrichten
@@ -29,12 +28,15 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe(MQTT_TOPIC_SUB)
 
 def on_message(client, userdata, msg):
-
     """Empfängt neue Relais-Zustände und aktualisiert die Webseite"""
     global relays
     try:
         new_data = json.loads(msg.payload.decode())  # JSON-String in Python-Dict umwandeln
-        relays = new_data["relays"]  # Neue Zustände übernehmen
+        relay_id = new_data["relays"][0]['id']
+        for relay in relays:
+            if relay["id"] == relay_id:
+                relays[ relay_id] = new_data["relays"][0]  # Neue Zustände übernehmen
+        
         print("Relais-Status aktualisiert:", relays)
 
         # Aktualisierte Zustände an alle Clients senden
@@ -42,7 +44,6 @@ def on_message(client, userdata, msg):
 		
     except json.JSONDecodeError:
         print("Fehler: Ungültiges JSON empfangen!")
-
 
 mqtt_client.on_connect = on_connect
 mqtt_client.on_message = on_message
@@ -58,10 +59,15 @@ def toggle_relay(data):
     """Wird aufgerufen, wenn ein Benutzer ein Relais über die Webseite umschaltet"""
     relay_id = int(data["relay_id"])
     
+    
     for relay in relays:
         if relay["id"] == relay_id:
             relay["state"] = "on" if relay["state"] == "off" else "off"
-            mqtt_client.publish(MQTT_TOPIC_PUB, f"{relay_id},{1 if relay['state'] == 'on' else 0}")
+            dictRelays = { 'relays' : [] }
+            dictRelays["relays"].append( relay )
+            mqtt_client.publish( MQTT_TOPIC_PUB, json.dumps( dictRelays ) )
+            
+    #       
     
     # Aktualisierte Relais-Zustände an alle Clients senden
     socketio.emit("update_relays", {"relays": relays})
