@@ -51,7 +51,6 @@ try:
         if nachricht.lower() == 'ping':
             publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
-        
         if nachricht.lower() == 'ping':
             publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
