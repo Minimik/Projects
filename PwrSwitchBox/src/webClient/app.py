@@ -18,7 +18,6 @@ relays = [
     {"id": 1, "name": "Relay2", "state": "off", "mode": "manual", "timers": []},
     {"id": 2, "name": "Relay3", "state": "off", "mode": "manual", "timers": []},
     {"id": 3, "name": "Relay4", "state": "off", "mode": "manual", "timers": []}
-
 ]
 
 # MQTT Client einrichten
@@ -33,7 +32,11 @@ def on_message(client, userdata, msg):
     global relays
     try:
         new_data = json.loads(msg.payload.decode())  # JSON-String in Python-Dict umwandeln
-        relays = new_data["relays"]  # Neue Zustände übernehmen
+        relay_id = new_data["relays"][0]['id']
+        for relay in relays:
+            if relay["id"] == relay_id:
+                relays[ relay_id] = new_data["relays"][0]  # Neue Zustände übernehmen
+        
         print("Relais-Status aktualisiert:", relays)
 
         # Aktualisierte Zustände an alle Clients senden
@@ -56,10 +59,15 @@ def toggle_relay(data):
     """Wird aufgerufen, wenn ein Benutzer ein Relais über die Webseite umschaltet"""
     relay_id = int(data["relay_id"])
     
+    
     for relay in relays:
         if relay["id"] == relay_id:
             relay["state"] = "on" if relay["state"] == "off" else "off"
-            mqtt_client.publish(MQTT_TOPIC_PUB, f"{relay_id},{1 if relay['state'] == 'on' else 0}")
+            dictRelays = { 'relays' : [] }
+            dictRelays["relays"].append( relay )
+            mqtt_client.publish( MQTT_TOPIC_PUB, json.dumps( dictRelays ) )
+            
+    #       
     
     # Aktualisierte Relais-Zustände an alle Clients senden
     socketio.emit("update_relays", {"relays": relays})

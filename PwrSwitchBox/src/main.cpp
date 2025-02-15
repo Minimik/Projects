@@ -107,12 +107,6 @@ struct Timer {
   byte days;          // bit is set which day of the week the time shall be used
   // String repeatDays[7];
   // String interval;
-  byte active;
-  short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
-  short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
-  byte days;          // bit is set which day of the week the time shall be used
-  // String repeatDays[7];
-  // String interval;
 
   time_t parseISO8601(const char* iso8601 /*= NULL*/ );
 };
@@ -155,25 +149,6 @@ void prepareJSON( void );
 String payloadToString(byte* payload, unsigned int length);
 void setupOTA();
 
-void restoreRelayConfigFromFlash()
-{
-  File file = LittleFS.open("/config.bin", "rb");
-  if (!file) {
-    Serial.println("Fehler beim Öffnen der Datei!");
-    return;
-  }
-
-  for (int i = 0; i < RELAY_COUNT; i++) {
-
-    relays;
-    file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
-
-    pinMode( relayPins[i], OUTPUT );
-    digitalWrite( relayPins[i], LOW ); // Relais initial aus
-  }
-
-  file.close();
-}
 
 void restoreRelayConfigFromFlash()
 {
@@ -199,12 +174,12 @@ void setup() {
 
   Serial.begin(115200);
 
-  setupWifiManager( );
+//  setupWifiManager( );
 
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
 
-    relays[i].id = i + 1;
+    relays[i].id = i;
     relays[i].state = "on";
     relays[i].name = String("Relay") + String(i+1);
     relays[i].mode = "manual";
@@ -245,12 +220,6 @@ void setup() {
     return;
   }
 
-  // 1. LittleFS starten
-  if (!LittleFS.begin()) {
-    Serial.println("Fehler beim Mounten von LittleFS!");
-    return;
-  }
-
   // MQTT verbinden
   connectMQTT();
 
@@ -274,13 +243,13 @@ void loop() {
   ArduinoOTA.handle();
 
   // Timer verarbeiten
-  processTimers();
+  //processTimers();
 
   //updateRelays();
-  // digitalWrite( relayPins[3], LOW );
-  // delay( 1000 );
-  // digitalWrite( relayPins[3], HIGH );
-  // delay( 1000 );
+  //  digitalWrite( relayPins[3], LOW );
+  //  delay( 1000 );
+  //  digitalWrite( relayPins[3], HIGH );
+  //  delay( 1000 );
 }
 
 // int main(  )
@@ -523,7 +492,7 @@ void parseJSON(const String &jsonString) {
     // }
   }
 
-  updateRelays();
+  //updateRelays();
 }
 
 // prepare current relays state to JSON/MQTT payload
@@ -562,20 +531,23 @@ void prepareJSON( void )
 
 // Relais aktualisieren
 void updateRelays() {
-  for (int i = 0; i < RELAY_COUNT; i++) {
+  for (int i = 0; i < RELAY_COUNT; i++)
+  {
+    if (relays[i].mode == "manual")
+    {
 
+      // Serial.println( relays[i].id );
+      // Serial.println( relays[i].name );
+      // Serial.print( (relays[i].state == "on") );
+      // Serial.println( relays[i].state );
+      // Serial.println( relays[i].mode );
+      uint8_t outVal = (relays[i].state == "on")? HIGH : LOW;
+      // Serial.println( String("outVal: ") + String( outVal ) + String("relayPin: ") + String(relayPins[i]) );
+      digitalWrite( relayPins[i], outVal );
 
-
-    if (relays[i].mode == "manual") {
-
-    // Serial.println( relays[i].id );
-    // Serial.println( relays[i].name );
-    // Serial.print( (relays[i].state == "on") );
-    // Serial.println( relays[i].state );
-    // Serial.println( relays[i].mode );
-
-      digitalWrite( relayPins[i], (relays[i].state == "on"));
-
+    }
+    else  {
+      processTimers();
     }
   }
 }
