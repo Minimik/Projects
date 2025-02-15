@@ -42,6 +42,7 @@ client.loop_start()
 
 try:
     relayState = "off"
+
     while True:
         # Beispiel: Nachricht senden
         nachricht = input("Gib eine Nachricht ein, die gesendet werden soll (oder 'exit' zum Beenden): ")
