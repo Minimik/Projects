@@ -42,6 +42,7 @@ client.loop_start()
 
 try:
     relayState = "off"
+    
     while True:
         # Beispiel: Nachricht senden
         nachricht = input("Gib eine Nachricht ein, die gesendet werden soll (oder 'exit' zum Beenden): ")
@@ -51,7 +52,6 @@ try:
         if nachricht.lower() == 'ping':
             publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 
-        
         if nachricht.lower() == 'ping':
             publish_message( client, MQTT_TOPIC_RELAYSTATEUPDATE_PUB, "ping" )
 

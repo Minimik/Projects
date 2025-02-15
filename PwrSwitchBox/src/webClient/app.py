@@ -12,6 +12,8 @@ MQTT_TOPIC_PUB = "home/relays"
 MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
 
 
+MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
+
 # Relais-Zustände als JSON
 relays = [
     {"id": 0, "name": "Relay1", "state": "off", "mode": "manual", "timers": []},
