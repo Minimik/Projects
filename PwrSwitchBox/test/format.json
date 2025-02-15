@@ -1,9 +1,7 @@
 {
     "relays": [
         {
-
             "id": 0,
-
             "name": "Relay1",
             "state": "off",
             "mode": "manual",
@@ -11,7 +9,6 @@
         },
         {
             "id": 1,
-
             "name": "Relay1",
             "state": "off",
             "mode": "manual",
