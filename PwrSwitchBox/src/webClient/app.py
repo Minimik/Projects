@@ -9,10 +9,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 MQTT_BROKER = "192.168.178.95"
 MQTT_TOPIC_SUB = "home/relays"
 MQTT_TOPIC_PUB = "home/relays"
-MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
-
 
 MQTT_TOPIC_RELAYSTATEUPDATE_PUB = "home/relaysstate"
+
 
 # Relais-Zustände als JSON
 relays = [
