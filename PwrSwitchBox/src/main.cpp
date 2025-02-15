@@ -9,7 +9,6 @@
 #include <WiFiManager.h>
 #include <LittleFS.h>
 
-
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
@@ -375,7 +374,6 @@ void setupWifiManager()
 }
 
 
-
 // OTA konfigurieren
 void setupOTA() {
   ArduinoOTA.onStart([]() {
@@ -468,7 +466,6 @@ void parseJSON(const String &jsonString) {
     
     int idx = ((int)(relayObject["id"]));
     
-
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
