@@ -9,6 +9,7 @@
         },
         {
             "id": 1,
+
             "name": "Relay1",
             "state": "off",
             "mode": "manual",
