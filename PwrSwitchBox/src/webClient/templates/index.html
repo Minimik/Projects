@@ -12,6 +12,26 @@
             padding: 5px 10px; background-color: #FF9800; color: white; border: none; cursor: pointer;
         }
         .wizard-button:hover { background-color: #e68900; }
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc; transition: .4s; border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px;
+            background-color: white; transition: .4s; border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4CAF50; }
+        input:checked + .slider:before { transform: translateX(26px); }
+        .dropdown {
+            padding: 5px; margin-left: 10px;
+        }
+        .update-button {
+            margin-top: 20px; padding: 10px 20px; font-size: 16px;
+            background-color: #008CBA; color: white; border: none; cursor: pointer;
+        }
+        .update-button:hover { background-color: #005f73; }
 
         /* POPUP STYLING */
         .modal {
@@ -45,11 +65,25 @@
     <div id="relay-list">
         {% for relay in relays %}
         <div class="relay-container">
-            <span>{{ relay.name }} ({{ relay.mode }})</span>
+            <span>{{ relay.name }}</span>
+            <label class="switch">
+                <input type="checkbox" id="relay{{ relay.id }}" {% if relay.state == 'on' %}checked{% endif %}
+                    onchange="toggleRelay({{ relay.id }})">
+                <span class="slider"></span>
+            </label>
+
+            <!-- Dropdown für Modusauswahl -->
+            <select class="dropdown" onchange="changeMode({{ relay.id }}, this.value)">
+                <option value="manual" {% if relay.mode == 'manual' %}selected{% endif %}>Manuell</option>
+                <option value="timer" {% if relay.mode == 'timer' %}selected{% endif %}>Timer</option>
+            </select>
+
             <button class="wizard-button" onclick="openWizard({{ relay.id }})">⏳ Timer verwalten</button>
         </div>
         {% endfor %}
     </div>
+    <!-- Aktualisieren-Taster -->
+    <button class="update-button" onclick="requestUpdate()">🔄 Aktualisieren</button>
 
     <!-- Timer Wizard Popup -->
     <div id="wizardModal" class="modal">
@@ -86,6 +120,19 @@
         var socket = io.connect("http://" + document.domain + ":" + location.port);
         var relayTimers = {}; 
         var currentRelayId = null;
+
+        function toggleRelay(relayId) {
+            socket.emit("toggle_relay", { relay_id: relayId });
+        }
+
+        function changeMode(relayId, newMode) {
+            socket.emit("set_mode", { relay_id: relayId, mode: newMode });
+        }
+        
+        function requestUpdate() {
+            console.log("MQTT-Update angefordert");
+            socket.emit("request_update");
+        }
 
         function openWizard(relayId) {
             currentRelayId = relayId;
