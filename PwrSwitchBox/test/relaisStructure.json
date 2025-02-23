@@ -1,22 +1,32 @@
 {
-    "relays": [
+  "relays": [
       {
-        "id": 0,
-        "name": "Relay 1",
-        "state": "off",
-        "mode": "manual",
-        "timers": [
-          {
-            "id": 1,
-            "action": "on",
-            "time": "2025-01-23T08:00:00",
-            "repeat": {
-              "days": [ "Monday", "Wednesday", "Friday" ],
-              "interval": "weekly"
-            },
-            "enabled": true
-          }
-        ]
+          "id": 3,
+          "name": "Relay4",
+          "state": "off",
+          "mode": "manual",
+          "timers": [
+              {
+                  "start": "12:12",
+                  "end": "13:13",
+                  "days": [
+                      "Di",
+                      "Do",
+                      "Sa"
+                  ],
+                  "active": true
+              },
+              {
+                  "start": "12:12",
+                  "end": "13:14",
+                  "days": [
+                      "Di",
+                      "Do",
+                      "Sa"
+                  ],
+                  "active": true
+              }
+          ]
       }
-    ]
-  }
+  ]
+}

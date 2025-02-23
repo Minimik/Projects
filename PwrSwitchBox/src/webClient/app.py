@@ -88,7 +88,7 @@ def set_schedule(data):
     # Update relay mode
     for relay in relays:
         if relay["id"] == relay_id:
-            relay["timer"] = timers
+            relay["timers"] = timers
             
             dictRelays = { 'relays' : [] }
             dictRelays["relays"].append( relay )
