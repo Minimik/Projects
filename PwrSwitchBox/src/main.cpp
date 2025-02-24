@@ -566,6 +566,7 @@ void prepareJSON( void )
     serializeJson(doc, jsonString);
     Serial.println( jsonString.c_str() );
 
+
     if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
     {
       Serial.println( "couldn't publish the string!");
