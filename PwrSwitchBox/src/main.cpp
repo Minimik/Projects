@@ -498,7 +498,6 @@ void parseJSON(const String &jsonString)
       relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
       relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
       JsonArray daysArray = timerObject["days"].as<JsonArray>();
-
       for(JsonVariant v : daysArray)
       {
         byte bDays = 0;
@@ -565,6 +564,7 @@ void prepareJSON( void )
     String jsonString;
     serializeJson(doc, jsonString);
     Serial.println( jsonString.c_str() );
+
 
     if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
     {
