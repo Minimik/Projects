@@ -159,7 +159,6 @@ void restoreRelayConfigFromFlash()
 
   for (int i = 0; i < RELAY_COUNT; i++) {
 
-    relays;
     file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
 
     pinMode( relayPins[i], OUTPUT );
@@ -496,7 +495,24 @@ void parseJSON(const String &jsonString) {
       relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
       timeHelper = timerObject["stop"].as<String>();
       relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
+      relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
+      JsonArray daysArray = timerObject["days"].as<JsonArray>();
+      for(JsonVariant v : daysArray)
+      {
+        byte bDays = 0;
+        if ( v.as<String>().lastIndexOf( "Mo" ) != -1 ) bDays |= enmDayOfWeek::monday;
+        else if ( v.as<String>().lastIndexOf( "Di" ) != -1 ) bDays |= enmDayOfWeek::tuesday;
+        else if ( v.as<String>().lastIndexOf( "Mi" ) != -1 ) bDays |= enmDayOfWeek::wednesday;
+        else if ( v.as<String>().lastIndexOf( "Do" ) != -1 ) bDays |= enmDayOfWeek::thursday;
+        else if ( v.as<String>().lastIndexOf( "Fr" ) != -1 ) bDays |= enmDayOfWeek::friday;
+        else if ( v.as<String>().lastIndexOf( "Sa" ) != -1 ) bDays |= enmDayOfWeek::saturday;
+        else if ( v.as<String>().lastIndexOf( "So" ) != -1 ) bDays |= enmDayOfWeek::sunday;
+        else bDays = 0x80;
 
+        relays[ idx ].timers[ j ].days = bDays;
+
+        Serial.println(v.as<int>());
+      }
     //   relays[i].timers[j].action = timerObject["action"].as<String>();
     //   relays[i].timers[j].time = timerObject["time"].as<String>();
     //   relays[i].timers[j].enabled = timerObject["enabled"];
@@ -533,9 +549,29 @@ void prepareJSON( void )
     doc["relays"][0]["state"] = relays[i].state;
     doc["relays"][0]["name"] = relays[i].name;
 
+    for ( int j = 0; j < TIMER_PER_RELAY; j++)
+    {
+      doc["relays"][0]["timers"][j]["active"] = relays[i].timers[j].active;
+      doc["relays"][0]["timers"][j]["start"] = shortToTimeString( relays[i].timers[j].sStarttime );
+      doc["relays"][0]["timers"][j]["stop"] = shortToTimeString( relays[i].timers[j].sStoptime );
+
+      byte days = relays[i].timers[j].days;
+      int dayElem = 0;
+      while ( days != 0 )
+      {
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::monday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Mo"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::tuesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Di"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::wednesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Mi"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::thursday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Do"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::friday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Fr"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::saturday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Sa"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::sunday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "So"; }
+      }
+    }
     String jsonString;
     serializeJson(doc, jsonString);
     Serial.println( jsonString.c_str() );
+
 
     if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
     {
