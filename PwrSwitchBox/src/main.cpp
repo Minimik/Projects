@@ -513,6 +513,9 @@ void parseJSON(const String &jsonString) {
 
         Serial.println(v.as<int>());
       }
+
+        Serial.println(v.as<int>());
+      }
     }
   }
 
@@ -562,7 +565,6 @@ void prepareJSON( void )
     String jsonString;
     serializeJson(doc, jsonString);
     Serial.println( jsonString.c_str() );
-
 
     if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
     {
