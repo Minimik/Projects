@@ -145,7 +145,6 @@ void processTimers(  uint8_t nmbRelay );
 //bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
 //String getCurrentDay();
 void prepareJSON( void );
-void prepareJSON( void );
 
 // Hilfsfunktionen
 String payloadToString(byte* payload, unsigned int length);
@@ -175,7 +174,7 @@ void setup() {
 
   Serial.begin(115200);
 
-  setupWifiManager( );
+//  setupWifiManager( );
 
   // Relais-Pins initialisieren
   for (int i = 0; i < RELAY_COUNT; i++) {
@@ -192,6 +191,11 @@ void setup() {
 
 
     pinMode( relayPins[i], OUTPUT );
+    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
+    {
+      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
+    }
+
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -247,9 +251,6 @@ void loop() {
   //  delay( 1000 );
 }
 
-//int main(  )
-//{
-//  setup();
 // int main(  )
 // {
 //   setup();
@@ -257,7 +258,6 @@ void loop() {
 // while ( 1 )
 //   loop();
 
-//}
 // }
 
 
@@ -463,7 +463,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 // JSON-Daten verarbeiten
-void parseJSON(const String &jsonString) {
+void parseJSON(const String &jsonString)
+{
   //DynamicJsonDocument doc(4096);
   JsonDocument doc; //(4096);
   DeserializationError error = deserializeJson( doc, jsonString );
@@ -486,7 +487,6 @@ void parseJSON(const String &jsonString) {
     relays[ idx ].state = relayObject["state"].as<String>();
     relays[ idx ].mode = relayObject["mode"].as<String>();
 
-    
 
     JsonArray timersArray = relayObject["timers"].as<JsonArray>();
     for (uint j = 0; j < timersArray.size() && j < TIMER_PER_RELAY; j++)
@@ -498,6 +498,7 @@ void parseJSON(const String &jsonString) {
       relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
       relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
       JsonArray daysArray = timerObject["days"].as<JsonArray>();
+
       for(JsonVariant v : daysArray)
       {
         byte bDays = 0;
@@ -511,9 +512,6 @@ void parseJSON(const String &jsonString) {
         else bDays = 0x80;
 
         relays[ idx ].timers[ j ].days = bDays;
-
-        Serial.println(v.as<int>());
-      }
 
         Serial.println(v.as<int>());
       }
@@ -544,39 +542,6 @@ void prepareJSON( void )
     doc["relays"][0]["state"] = relays[i].state;
     doc["relays"][0]["name"] = relays[i].name;
 
-    String jsonString;
-    serializeJson(doc, jsonString);
-    Serial.println( jsonString.c_str() );
-
-    if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
-    {
-      Serial.println( "couldn't publish the string!");
-    }    
-  }
-
-
-}
-
-// Relais aktualisieren
-void updateRelays() {
-  for (int i = 0; i < RELAY_COUNT; i++) {
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson( doc, jsonTemplate );
-
-  if (error) {
-    Serial.println("JSON-Parsing fehlgeschlagen!");
-    return;
-  }
-
-  //JsonArray relaysArray = doc["relays"].as<JsonArray>();
-  for (uint i = 0; /* i < relaysArray.size() && */ i < RELAY_COUNT; i++)
-  {
-    
-    doc["relays"][0]["id"] = relays[i].id;
-    doc["relays"][0]["state"] = relays[i].state;
-    doc["relays"][0]["name"] = relays[i].name;
-
     //  digitalWrite( 2, (relays[i].state == "on"));
     for ( int j = 0; j < TIMER_PER_RELAY; j++)
     {
@@ -585,16 +550,16 @@ void updateRelays() {
       doc["relays"][0]["timers"][j]["stop"] = shortToTimeString( relays[i].timers[j].sStoptime );
 
       byte days = relays[i].timers[j].days;
-      int dayElem = 0;
+      int dayElemJSON = 0;
       while ( days != 0 )
       {
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::monday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Mo"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::tuesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Di"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::wednesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Mi"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::thursday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Do"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::friday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Fr"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::saturday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "Sa"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::sunday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElem++] = "So"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::monday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mo"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::tuesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Di"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::wednesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mi"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::thursday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Do"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::friday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Fr"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::saturday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Sa"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::sunday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "So"; }
       }
     }
     String jsonString;
@@ -606,12 +571,11 @@ void updateRelays() {
       Serial.println( "couldn't publish the string!");
     }    
   }
-
-
 }
 
-// Relais aktualisieren
-void updateRelays() {
+// // Relais aktualisieren
+void updateRelays()
+{
   for (int i = 0; i < RELAY_COUNT; i++)
   {
     if (relays[i].mode == "manual")
@@ -635,7 +599,6 @@ void updateRelays() {
 
 String payloadToString(byte* payload, unsigned int length)
 {
-
   String message = "";
   for (unsigned int i = 0; i < length; i++) {
       message += (char)payload[i];
@@ -670,25 +633,6 @@ void processTimers( uint8_t nmbRelay )
       }
 
       digitalWrite( relayPins[ relays[ nmbRelay ].id ], iTargetRelayState );
-      
-    //   relays[i].id = relayObject["id"];
-    // relays[i].name = relayObject["name"].as<String>();
-    // relays[i].state = relayObject["state"].as<String>();
-    // relays[i].mode = relayObject["mode"].as<String>();
-    // relays[i].timerCount = 0;
-
-    // JsonArray timersArray = relayObject["timers"].as<JsonArray>();
-    // for (uint j = 0; j < timersArray.size() && j < 5; j++) {
-    //   JsonObject timerObject = timersArray[j];
-    //   relays[i].timers[j].id = timerObject["id"];
-    //   relays[i].timers[j].action = timerObject["action"].as<String>();
-    //   relays[i].timers[j].time = timerObject["time"].as<String>();
-    //   relays[i].timers[j].enabled = timerObject["enabled"];
-
-    //   JsonArray repeatDaysArray = timerObject["repeat"]["days"].as<JsonArray>();
-    //   for (uint k = 0; k < repeatDaysArray.size() && k < 7; k++) {
-    //     relays[i].timers[j].repeatDays[k] = repeatDaysArray[k].as<String>();
-    //   }
-    //   relays[i].timerCount++;
+ 
   }
 }
