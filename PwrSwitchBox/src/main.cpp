@@ -9,6 +9,8 @@
 #include <WiFiManager.h>
 #include <LittleFS.h>
 
+
+
 // WiFi-Zugangsdaten
 String ssid = "Discovery Channel";
 String password = "466c697069";
@@ -139,7 +141,7 @@ void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void parseJSON(const String &jsonString);
 void updateRelays();
-void processTimers();
+void processTimers(  uint8_t nmbRelay );
 //bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
 //String getCurrentDay();
 void prepareJSON( void );
@@ -159,7 +161,6 @@ void restoreRelayConfigFromFlash()
 
   for (int i = 0; i < RELAY_COUNT; i++) {
 
-    relays;
     file.read((uint8_t*)&relays, sizeof(relays));  // Binär lesen
 
     pinMode( relayPins[i], OUTPUT );
@@ -188,13 +189,13 @@ void setup() {
       memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
     }
 
+
     pinMode( relayPins[i], OUTPUT );
     for ( int j = 0; j < TIMER_PER_RELAY; j++ )
     {
       memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
     }
 
-    pinMode( relayPins[i], OUTPUT );
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
 
@@ -207,7 +208,6 @@ void setup() {
 
   // NTP starten
   timeClient.begin();
-  // timeClient.getDay();
   // timeClient.getDay();
 
   // OTA-Setup
@@ -428,6 +428,21 @@ void connectMQTT() {
   }
 }
 
+short timeStringToShort( String& srTime )
+{
+  int hours = srTime.substring(0, 2).toInt();   // "14" → 14
+  int minutes = srTime.substring(3, 2).toInt(); // "30" → 30
+  return (hours << 8) | minutes;  // Stunden ins High-Byte, Minuten ins Low-Byte
+}
+
+String shortToTimeString( short encodedTime )
+{
+  int hours = (encodedTime >> 8) & 0xFF;  // High-Byte extrahieren
+  int minutes = encodedTime & 0xFF;      // Low-Byte extrahieren
+  return String( (unsigned char)hours ) + ":" + String( (unsigned char) minutes );
+}
+
+
 // MQTT-Callback (eingehende Nachrichten)
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = payloadToString(payload, length);
@@ -448,7 +463,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 // JSON-Daten verarbeiten
-void parseJSON(const String &jsonString) {
+void parseJSON(const String &jsonString)
+{
   //DynamicJsonDocument doc(4096);
   JsonDocument doc; //(4096);
   DeserializationError error = deserializeJson( doc, jsonString );
@@ -465,28 +481,41 @@ void parseJSON(const String &jsonString) {
     JsonObject relayObject = relaysArray[i];
     
     int idx = ((int)(relayObject["id"]));
-    
+
     relays[ idx ].id = relayObject["id"];
     relays[ idx ].name = relayObject["name"].as<String>();
     relays[ idx ].state = relayObject["state"].as<String>();
     relays[ idx ].mode = relayObject["mode"].as<String>();
 
-    
 
-    // JsonArray timersArray = relayObject["timers"].as<JsonArray>();
-    // for (uint j = 0; j < timersArray.size() && j < 5; j++) {
-    //   JsonObject timerObject = timersArray[j];
-    //   relays[i].timers[j].id = timerObject["id"];
-    //   relays[i].timers[j].action = timerObject["action"].as<String>();
-    //   relays[i].timers[j].time = timerObject["time"].as<String>();
-    //   relays[i].timers[j].enabled = timerObject["enabled"];
+    JsonArray timersArray = relayObject["timers"].as<JsonArray>();
+    for (uint j = 0; j < timersArray.size() && j < TIMER_PER_RELAY; j++)
+    {
+      JsonObject timerObject = timersArray[j];
+      String timeHelper = timerObject["start"].as<String>();
+      relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
+      timeHelper = timerObject["stop"].as<String>();
+      relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
+      relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
+      JsonArray daysArray = timerObject["days"].as<JsonArray>();
 
-    //   JsonArray repeatDaysArray = timerObject["repeat"]["days"].as<JsonArray>();
-    //   for (uint k = 0; k < repeatDaysArray.size() && k < 7; k++) {
-    //     relays[i].timers[j].repeatDays[k] = repeatDaysArray[k].as<String>();
-    //   }
-    //   relays[i].timerCount++;
-    // }
+      for(JsonVariant v : daysArray)
+      {
+        byte bDays = 0;
+        if ( v.as<String>().lastIndexOf( "Mo" ) != -1 ) bDays |= enmDayOfWeek::monday;
+        else if ( v.as<String>().lastIndexOf( "Di" ) != -1 ) bDays |= enmDayOfWeek::tuesday;
+        else if ( v.as<String>().lastIndexOf( "Mi" ) != -1 ) bDays |= enmDayOfWeek::wednesday;
+        else if ( v.as<String>().lastIndexOf( "Do" ) != -1 ) bDays |= enmDayOfWeek::thursday;
+        else if ( v.as<String>().lastIndexOf( "Fr" ) != -1 ) bDays |= enmDayOfWeek::friday;
+        else if ( v.as<String>().lastIndexOf( "Sa" ) != -1 ) bDays |= enmDayOfWeek::saturday;
+        else if ( v.as<String>().lastIndexOf( "So" ) != -1 ) bDays |= enmDayOfWeek::sunday;
+        else bDays = 0x80;
+
+        relays[ idx ].timers[ j ].days = bDays;
+
+        Serial.println(v.as<int>());
+      }
+    }
   }
 
   //updateRelays();
@@ -513,21 +542,41 @@ void prepareJSON( void )
     doc["relays"][0]["state"] = relays[i].state;
     doc["relays"][0]["name"] = relays[i].name;
 
+    //  digitalWrite( 2, (relays[i].state == "on"));
+    for ( int j = 0; j < TIMER_PER_RELAY; j++)
+    {
+      doc["relays"][0]["timers"][j]["active"] = relays[i].timers[j].active;
+      doc["relays"][0]["timers"][j]["start"] = shortToTimeString( relays[i].timers[j].sStarttime );
+      doc["relays"][0]["timers"][j]["stop"] = shortToTimeString( relays[i].timers[j].sStoptime );
+
+      byte days = relays[i].timers[j].days;
+      int dayElemJSON = 0;
+      while ( days != 0 )
+      {
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::monday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mo"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::tuesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Di"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::wednesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mi"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::thursday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Do"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::friday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Fr"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::saturday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Sa"; }
+        if ( ( relays[i].timers[j].days & enmDayOfWeek::sunday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "So"; }
+      }
+    }
     String jsonString;
     serializeJson(doc, jsonString);
     Serial.println( jsonString.c_str() );
+
 
     if ( !mqttClient.publish( MQTT_TOPIC_RELAY_PUB, jsonString.c_str() ) )
     {
       Serial.println( "couldn't publish the string!");
     }    
   }
-
-
 }
 
-// Relais aktualisieren
-void updateRelays() {
+// // Relais aktualisieren
+void updateRelays()
+{
   for (int i = 0; i < RELAY_COUNT; i++)
   {
     if (relays[i].mode == "manual")
@@ -544,14 +593,13 @@ void updateRelays() {
 
     }
     else  {
-      processTimers();
+      processTimers( i );
     }
   }
 }
 
 String payloadToString(byte* payload, unsigned int length)
 {
-
   String message = "";
   for (unsigned int i = 0; i < length; i++) {
       message += (char)payload[i];
@@ -561,53 +609,31 @@ String payloadToString(byte* payload, unsigned int length)
 }
 
 
-void processTimers()
+void processTimers( uint8_t nmbRelay )
 {
-  for (uint i = 0; i < RELAY_COUNT; i++)
-  {
-    if ( relays[i].id != -1 )
+    if ( relays[nmbRelay].id != -1 )
     {
       int iTargetRelayState = 0;
 
-      for ( uint t = 0; t < TIMER_PER_RELAY && relays[i].timers[t].id != -1; t++ )
+      for ( uint t = 0; t < TIMER_PER_RELAY && relays[ nmbRelay ].timers[t].id != -1; t++ )
       {
 
-        if ( relays[i].timers[t].active != 0 )
+        if ( relays[ nmbRelay ].timers[t].active != 0 )
         {
           
           // time_t tmTimer = relays[i].timers[t].parseISO8601();
           time_t ntpTime = timeClient.getEpochTime();
 
           struct tm* localTime = localtime( &ntpTime );
-          if (    ( ( localTime->tm_hour >= (relays[i].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[i].timers[t].sStarttime ) ) & 0xFF )
-              &&  ( ( localTime->tm_hour <= (relays[i].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[i].timers[t].sStoptime ) ) & 0xFF ) ) 
+          if (    ( ( localTime->tm_hour >= (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[ nmbRelay ].timers[t].sStarttime ) ) & 0xFF )
+              &&  ( ( localTime->tm_hour <= (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[ nmbRelay ].timers[t].sStoptime ) ) & 0xFF ) ) 
           {
-            iTargetRelayState = ( ( (2 << localTime->tm_wday) & relays[i].timers[t].days ) != 0 )? 1 : 0;
+            iTargetRelayState = ( ( (2 << localTime->tm_wday) & relays[nmbRelay].timers[t].days ) != 0 )? 1 : 0;
           }
         }
       }
 
-      digitalWrite( relayPins[ relays[i].id ], iTargetRelayState );
-      
-    //   relays[i].id = relayObject["id"];
-    // relays[i].name = relayObject["name"].as<String>();
-    // relays[i].state = relayObject["state"].as<String>();
-    // relays[i].mode = relayObject["mode"].as<String>();
-    // relays[i].timerCount = 0;
-
-    // JsonArray timersArray = relayObject["timers"].as<JsonArray>();
-    // for (uint j = 0; j < timersArray.size() && j < 5; j++) {
-    //   JsonObject timerObject = timersArray[j];
-    //   relays[i].timers[j].id = timerObject["id"];
-    //   relays[i].timers[j].action = timerObject["action"].as<String>();
-    //   relays[i].timers[j].time = timerObject["time"].as<String>();
-    //   relays[i].timers[j].enabled = timerObject["enabled"];
-
-    //   JsonArray repeatDaysArray = timerObject["repeat"]["days"].as<JsonArray>();
-    //   for (uint k = 0; k < repeatDaysArray.size() && k < 7; k++) {
-    //     relays[i].timers[j].repeatDays[k] = repeatDaysArray[k].as<String>();
-    //   }
-    //   relays[i].timerCount++;
-    }
+      digitalWrite( relayPins[ relays[ nmbRelay ].id ], iTargetRelayState );
+ 
   }
 }
