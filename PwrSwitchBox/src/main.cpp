@@ -69,7 +69,7 @@ const char* jsonTemplate = R"json(
 // Relais-Pins
 const int relayPins[] = { D1, D2, D3, D4 };
 const int RELAY_COUNT = 4;
-const int TIMER_PER_RELAY = 5;
+const int TIMER_PER_RELAY = 6;
 
 #define TRIGGER_PIN 12
 
@@ -97,17 +97,40 @@ typedef enum enmDayOfWeek {
   sunday = 0x40
 } eDoW;
 
+/// @brief 
+typedef class daysOfWeek {
+public:
+  union
+  {
+    uint8_t mo : 1,
+            tu : 1,
+            we : 1,
+            th : 1,
+            fr : 1,
+            sa : 1,
+            su : 1,
+            pad : 1;
+    uint8_t allDays;
+  };
+
+  daysOfWeek() { this->allDays = 0; };
+  daysOfWeek( uint8_t defVal ) : allDays( defVal ) {  };
+
+} daysOfWeek_t;
+
 
 // Timer-Datenstruktur
 // Timer id '-1' means not set; ignore this Timer
 struct Timer {
-  int id;
+//  int id;
   byte active;
   short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
   short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
-  byte days;          // bit is set which day of the week the time shall be used
+  daysOfWeek_t days;  // bit is set which day of the week the time shall be used
   // String repeatDays[7];
   // String interval;
+
+  Timer() { active = 0; sStarttime = 0; sStoptime = 0; days.allDays = 0; };
 
   time_t parseISO8601(const char* iso8601 /*= NULL*/ );
 };
@@ -184,17 +207,11 @@ void setup() {
     relays[i].name = String("Relay") + String(i+1);
     relays[i].mode = "manual";
 
-    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
-    {
-      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
-    }
-
-
     pinMode( relayPins[i], OUTPUT );
-    for ( int j = 0; j < TIMER_PER_RELAY; j++ )
-    {
-      memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
-    }
+    // for ( int j = 0; j < TIMER_PER_RELAY; j++ )
+    // {
+    //   memset( &(relays[i].timers[j]) , 0, sizeof(Timer) );
+    // }
 
     digitalWrite( relayPins[i], LOW ); // Relais initial aus
   }
@@ -501,17 +518,17 @@ void parseJSON(const String &jsonString)
 
       for(JsonVariant v : daysArray)
       {
-        byte bDays = 0;
-        if ( v.as<String>().lastIndexOf( "Mo" ) != -1 ) bDays |= enmDayOfWeek::monday;
-        else if ( v.as<String>().lastIndexOf( "Di" ) != -1 ) bDays |= enmDayOfWeek::tuesday;
-        else if ( v.as<String>().lastIndexOf( "Mi" ) != -1 ) bDays |= enmDayOfWeek::wednesday;
-        else if ( v.as<String>().lastIndexOf( "Do" ) != -1 ) bDays |= enmDayOfWeek::thursday;
-        else if ( v.as<String>().lastIndexOf( "Fr" ) != -1 ) bDays |= enmDayOfWeek::friday;
-        else if ( v.as<String>().lastIndexOf( "Sa" ) != -1 ) bDays |= enmDayOfWeek::saturday;
-        else if ( v.as<String>().lastIndexOf( "So" ) != -1 ) bDays |= enmDayOfWeek::sunday;
-        else bDays = 0x80;
+        daysOfWeek_t bDays( (uint8_t)0 );
+        if ( v.as<String>().lastIndexOf( "Mo" ) != -1 ) bDays.mo = 1; //.allDays |= enmDayOfWeek::monday;
+        else if ( v.as<String>().lastIndexOf( "Di" ) != -1 ) bDays.tu = 1; //.allDays |= enmDayOfWeek::tuesday;
+        else if ( v.as<String>().lastIndexOf( "Mi" ) != -1 ) bDays.we = 1; //.allDays |= enmDayOfWeek::wednesday;
+        else if ( v.as<String>().lastIndexOf( "Do" ) != -1 ) bDays.th = 1; //.allDays |= enmDayOfWeek::thursday;
+        else if ( v.as<String>().lastIndexOf( "Fr" ) != -1 ) bDays.fr = 1; //.allDays |= enmDayOfWeek::friday;
+        else if ( v.as<String>().lastIndexOf( "Sa" ) != -1 ) bDays.sa = 1; //.allDays |= enmDayOfWeek::saturday;
+        else if ( v.as<String>().lastIndexOf( "So" ) != -1 ) bDays.su = 1; //.allDays |= enmDayOfWeek::sunday;
+        else bDays.allDays = 0x80;
 
-        relays[ idx ].timers[ j ].days = bDays;
+        relays[ idx ].timers[ j ].days = *(daysOfWeek_t*)&bDays;
 
         Serial.println(v.as<int>());
       }
@@ -549,17 +566,17 @@ void prepareJSON( void )
       doc["relays"][0]["timers"][j]["start"] = shortToTimeString( relays[i].timers[j].sStarttime );
       doc["relays"][0]["timers"][j]["stop"] = shortToTimeString( relays[i].timers[j].sStoptime );
 
-      byte days = relays[i].timers[j].days;
+      byte days = *(byte*)(&relays[i].timers[j].days);
       int dayElemJSON = 0;
       while ( days != 0 )
       {
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::monday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mo"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::tuesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Di"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::wednesday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mi"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::thursday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Do"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::friday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Fr"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::saturday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Sa"; }
-        if ( ( relays[i].timers[j].days & enmDayOfWeek::sunday ) != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "So"; }
+        if ( relays[i].timers[j].days.mo != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mo"; }
+        if ( relays[i].timers[j].days.tu != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Di"; }
+        if ( relays[i].timers[j].days.we  != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Mi"; }
+        if ( relays[i].timers[j].days.th  != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Do"; }
+        if ( relays[i].timers[j].days.fr  != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Fr"; }
+        if ( relays[i].timers[j].days.sa  != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "Sa"; }
+        if ( relays[i].timers[j].days.su  != 0 ) { doc["relays"][0]["timers"][j]["days"][dayElemJSON++] = "So"; }
       }
     }
     String jsonString;
@@ -615,7 +632,7 @@ void processTimers( uint8_t nmbRelay )
     {
       int iTargetRelayState = 0;
 
-      for ( uint t = 0; t < TIMER_PER_RELAY && relays[ nmbRelay ].timers[t].id != -1; t++ )
+      for ( uint t = 0; t < TIMER_PER_RELAY; t++ )
       {
 
         if ( relays[ nmbRelay ].timers[t].active != 0 )
@@ -628,7 +645,7 @@ void processTimers( uint8_t nmbRelay )
           if (    ( ( localTime->tm_hour >= (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[ nmbRelay ].timers[t].sStarttime ) ) & 0xFF )
               &&  ( ( localTime->tm_hour <= (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[ nmbRelay ].timers[t].sStoptime ) ) & 0xFF ) ) 
           {
-            iTargetRelayState = ( ( (2 << localTime->tm_wday) & relays[nmbRelay].timers[t].days ) != 0 )? 1 : 0;
+            iTargetRelayState = ( ( (2 << localTime->tm_wday) & *(byte*)&(relays[nmbRelay].timers[t].days) ) != 0 )? 1 : 0;
           }
         }
       }
