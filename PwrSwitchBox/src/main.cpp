@@ -164,9 +164,7 @@ void connectMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void parseJSON(const String &jsonString);
 void updateRelays();
-void processTimers(  uint8_t nmbRelay );
-//bool isTimeToTrigger(const String &targetTime, const String repeatDays[], int repeatDayCount);
-//String getCurrentDay();
+int processTimers(  uint8_t nmbRelay );
 void prepareJSON( void );
 
 // Hilfsfunktionen
@@ -596,6 +594,9 @@ void updateRelays()
 {
   for (int i = 0; i < RELAY_COUNT; i++)
   {
+    // get the current state of a relayPin
+    uint8_t outVal = digitalRead( relayPins[i] );
+
     if (relays[i].mode == "manual")
     {
 
@@ -604,14 +605,16 @@ void updateRelays()
       // Serial.print( (relays[i].state == "on") );
       // Serial.println( relays[i].state );
       // Serial.println( relays[i].mode );
-      uint8_t outVal = (relays[i].state == "on")? HIGH : LOW;
-      // Serial.println( String("outVal: ") + String( outVal ) + String("relayPin: ") + String(relayPins[i]) );
+      outVal = (relays[i].state == "on")? HIGH : LOW;
       digitalWrite( relayPins[i], outVal );
 
     }
     else  {
-      processTimers( i );
+      outVal = processTimers( i );
     }
+
+    Serial.println( String( "RelayId: " ) + String( relays[i].id ) + String(" - outVal: ") + String( outVal ) + String(" - relayPin: ") + String(relayPins[i]) );
+    digitalWrite( relayPins[i], outVal );
   }
 }
 
@@ -626,31 +629,40 @@ String payloadToString(byte* payload, unsigned int length)
 }
 
 
-void processTimers( uint8_t nmbRelay )
+int processTimers( uint8_t nmbRelay )
 {
-    if ( relays[nmbRelay].id != -1 )
+  int iTargetRelayState = -1;
+
+  if ( relays[nmbRelay].id != -1 )
+  {
+
+    for ( uint t = 0; t < TIMER_PER_RELAY; t++ )
     {
-      int iTargetRelayState = 0;
 
-      for ( uint t = 0; t < TIMER_PER_RELAY; t++ )
+      if ( relays[ nmbRelay ].timers[t].active != 0 )
       {
+        
+        // time_t tmTimer = relays[i].timers[t].parseISO8601();
+        time_t ntpTime = timeClient.getEpochTime();
 
-        if ( relays[ nmbRelay ].timers[t].active != 0 )
+        struct tm* localTime = localtime( &ntpTime );
+        if (    ( ( localTime->tm_hour >= (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[ nmbRelay ].timers[t].sStarttime ) ) & 0xFF )
+            &&  ( ( localTime->tm_hour <= (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[ nmbRelay ].timers[t].sStoptime ) ) & 0xFF ) ) 
         {
-          
-          // time_t tmTimer = relays[i].timers[t].parseISO8601();
-          time_t ntpTime = timeClient.getEpochTime();
 
-          struct tm* localTime = localtime( &ntpTime );
-          if (    ( ( localTime->tm_hour >= (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[ nmbRelay ].timers[t].sStarttime ) ) & 0xFF )
-              &&  ( ( localTime->tm_hour <= (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[ nmbRelay ].timers[t].sStoptime ) ) & 0xFF ) ) 
+          if ( localTime->tm_wday != 0 )
           {
-            iTargetRelayState = ( ( (2 << localTime->tm_wday) & *(byte*)&(relays[nmbRelay].timers[t].days) ) != 0 )? 1 : 0;
+            iTargetRelayState = ( 1 << (localTime->tm_wday - 1) ) & (relays[nmbRelay].timers[t].days.allDays ) ? 1 : 0;
           }
+          else
+          {
+            iTargetRelayState = relays[nmbRelay].timers[t].days.su;
+          }
+
         }
       }
-
-      digitalWrite( relayPins[ relays[ nmbRelay ].id ], iTargetRelayState );
- 
+    }
   }
+
+  return iTargetRelayState;   
 }
