@@ -223,6 +223,8 @@ void setup() {
 
   // NTP starten
   timeClient.begin();
+  timeClient.update();
+  Serial.println( timeClient.getFormattedTime() );
   // timeClient.getDay();
 
   // OTA-Setup
@@ -259,7 +261,7 @@ void loop() {
   // Timer verarbeiten
   //processTimers();
 
-  //updateRelays();
+  updateRelays();
   //  digitalWrite( relayPins[3], LOW );
   //  delay( 1000 );
   //  digitalWrite( relayPins[3], HIGH );
@@ -445,8 +447,10 @@ void connectMQTT() {
 
 short timeStringToShort( String& srTime )
 {
+  //Serial.println( srTime );
   int hours = srTime.substring(0, 2).toInt();   // "14" → 14
-  int minutes = srTime.substring(3, 2).toInt(); // "30" → 30
+  int minutes = srTime.substring(3).toInt(); // "30" → 30
+  //Serial.println( String( hours ) + ":" + String( minutes ) );
   return (hours << 8) | minutes;  // Stunden ins High-Byte, Minuten ins Low-Byte
 }
 
@@ -469,7 +473,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String sTopic( topic );
   if ( sTopic == MQTT_TOPIC_RELAY_SUB ) {
     parseJSON(message);
-    updateRelays();    
+    //updateRelays();    
   }
   else if ( sTopic == MQTT_TOPIC_RELAYSTATEUPDATE_PUB )
   {
@@ -509,8 +513,8 @@ void parseJSON(const String &jsonString)
       JsonObject timerObject = timersArray[j];
       String timeHelper = timerObject["start"].as<String>();
       relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
-      timeHelper = timerObject["stop"].as<String>();
-      relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
+      timeHelper = timerObject["end"].as<String>();
+      relays[ idx ].timers[ j ].sStoptime = timeStringToShort( timeHelper );
       relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
       JsonArray daysArray = timerObject["days"].as<JsonArray>();
 
@@ -613,7 +617,7 @@ void updateRelays()
       outVal = processTimers( i );
     }
 
-    Serial.println( String( "RelayId: " ) + String( relays[i].id ) + String(" - outVal: ") + String( outVal ) + String(" - relayPin: ") + String(relayPins[i]) );
+    //Serial.println( String( "RelayId: " ) + String( relays[i].id ) + String(" - outVal: ") + String( outVal ) + String(" - relayPin: ") + String(relayPins[i]) );
     digitalWrite( relayPins[i], outVal );
   }
 }
@@ -631,7 +635,7 @@ String payloadToString(byte* payload, unsigned int length)
 
 int processTimers( uint8_t nmbRelay )
 {
-  int iTargetRelayState = -1;
+  int iTargetRelayState = 0;
 
   if ( relays[nmbRelay].id != -1 )
   {
@@ -644,21 +648,36 @@ int processTimers( uint8_t nmbRelay )
         
         // time_t tmTimer = relays[i].timers[t].parseISO8601();
         time_t ntpTime = timeClient.getEpochTime();
+        //Serial.println( timeClient.getFormattedTime() );
 
         struct tm* localTime = localtime( &ntpTime );
-        if (    ( ( localTime->tm_hour >= (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min >= (relays[ nmbRelay ].timers[t].sStarttime ) ) & 0xFF )
-            &&  ( ( localTime->tm_hour <= (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) ) & 0xFF ) && ( ( localTime->tm_min <= (relays[ nmbRelay ].timers[t].sStoptime ) ) & 0xFF ) ) 
-        {
+        //Serial.printf( "Start Hour: %02d : %02d\t",  localTime->tm_hour, (relays[ nmbRelay ].timers[t].sStarttime >> 8 ) & 0xFF );
+        //Serial.printf( "Start Min: %02d : %02d\t",  localTime->tm_min, (relays[ nmbRelay ].timers[t].sStarttime )  & 0xFF );
+        //Serial.printf( "Stop Hour: %02d : %02d\t",  localTime->tm_hour, (relays[ nmbRelay ].timers[t].sStoptime >> 8 ) & 0xFF );
+        //Serial.printf( "Stop Min: %02d : %02d\n",  localTime->tm_min, (relays[ nmbRelay ].timers[t].sStoptime )  & 0xFF );
 
+        bool bStartH = localTime->tm_hour >= ((relays[ nmbRelay ].timers[t].sStarttime >> 8 )  & 0xFF );
+        bool bStopH  = localTime->tm_hour <= ((relays[ nmbRelay ].timers[t].sStoptime >> 8  ) & 0xFF );
+        bool bStartM =  localTime->tm_min >= ((relays[ nmbRelay ].timers[t].sStarttime )  & 0xFF );
+        bool bStopM =  localTime->tm_min <= ((relays[ nmbRelay ].timers[t].sStoptime )  & 0xFF );
+
+        Serial.printf( "stH: %d; stM: %d; spH: %d; spM: %d\n", bStartH, bStartM, bStopH, bStopM );
+        if ( bStartH    &&  bStartM && bStopH && bStopM )
+        {
+          //Serial.println( "timecheck done...");
           if ( localTime->tm_wday != 0 )
           {
-            iTargetRelayState = ( 1 << (localTime->tm_wday - 1) ) & (relays[nmbRelay].timers[t].days.allDays ) ? 1 : 0;
+            iTargetRelayState |= ( 1 << (localTime->tm_wday - 1) ) & (relays[nmbRelay].timers[t].days.allDays ) ? 1 : 0;
           }
           else
           {
-            iTargetRelayState = relays[nmbRelay].timers[t].days.su;
+            iTargetRelayState |= relays[nmbRelay].timers[t].days.su;
           }
 
+        }
+        else
+        {
+          iTargetRelayState |= 0;
         }
       }
     }
