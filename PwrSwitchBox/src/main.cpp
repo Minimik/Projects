@@ -9,6 +9,7 @@
 #include <WiFiManager.h>
 #include <LittleFS.h>
 
+#include "Timer.h"
 
 
 // WiFi-Zugangsdaten
@@ -87,63 +88,6 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600, 60000); // Zeitzone +1 Stunde, Aktualisierung alle 60 Sekunden
 
 
-typedef enum enmDayOfWeek {
-  monday = 0x01,
-  tuesday = 0x02,
-  wednesday = 0x04,
-  thursday = 0x08,
-  friday = 0x10,
-  saturday = 0x20,
-  sunday = 0x40
-} eDoW;
-
-/// @brief 
-typedef class daysOfWeek {
-public:
-  union
-  {
-    uint8_t mo : 1,
-            tu : 1,
-            we : 1,
-            th : 1,
-            fr : 1,
-            sa : 1,
-            su : 1,
-            pad : 1;
-    uint8_t allDays;
-  };
-
-  daysOfWeek() { this->allDays = 0; };
-  daysOfWeek( uint8_t defVal ) : allDays( defVal ) {  };
-
-} daysOfWeek_t;
-
-
-// Timer-Datenstruktur
-// Timer id '-1' means not set; ignore this Timer
-struct Timer {
-//  int id;
-  byte active;
-  short sStarttime;   // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52
-  short sStoptime;    // the format is Hi-byte means the hour and the Low-byte means the minute e.g. 0D34 means time of Day 13:52 
-  daysOfWeek_t days;  // bit is set which day of the week the time shall be used
-  // String repeatDays[7];
-  // String interval;
-
-  Timer() { active = 0; sStarttime = 0; sStoptime = 0; days.allDays = 0; };
-
-  time_t parseISO8601(const char* iso8601 /*= NULL*/ );
-};
-
-time_t Timer::parseISO8601( const char* iso8601 = NULL )
-{
-  // struct tm t = {};
-  // if (strptime( (iso8601)? this->time.c_str() : iso8601, "%Y-%m-%dT%H:%M:%S", &t ) )
-  // {
-  //     return mktime( &t );  // Konvertiere zu time_t
-  // }
-  return 0;  // Fehlerfall
-}
 
 // Relais-Datenstruktur
 struct Relay {
@@ -445,21 +389,7 @@ void connectMQTT() {
   }
 }
 
-short timeStringToShort( String& srTime )
-{
-  //Serial.println( srTime );
-  int hours = srTime.substring(0, 2).toInt();   // "14" → 14
-  int minutes = srTime.substring(3).toInt(); // "30" → 30
-  //Serial.println( String( hours ) + ":" + String( minutes ) );
-  return (hours << 8) | minutes;  // Stunden ins High-Byte, Minuten ins Low-Byte
-}
 
-String shortToTimeString( short encodedTime )
-{
-  int hours = (encodedTime >> 8) & 0xFF;  // High-Byte extrahieren
-  int minutes = encodedTime & 0xFF;      // Low-Byte extrahieren
-  return String( (unsigned char)hours ) + ":" + String( (unsigned char) minutes );
-}
 
 
 // MQTT-Callback (eingehende Nachrichten)
@@ -512,9 +442,9 @@ void parseJSON(const String &jsonString)
     {
       JsonObject timerObject = timersArray[j];
       String timeHelper = timerObject["start"].as<String>();
-      relays[ idx ].timers[ j ].sStarttime = timeStringToShort( timeHelper );
+      relays[ idx ].timers[ j ].setStartTime( timeHelper );
       timeHelper = timerObject["end"].as<String>();
-      relays[ idx ].timers[ j ].sStoptime = timeStringToShort( timeHelper );
+      relays[ idx ].timers[ j ].setStopTime( timeHelper );
       relays[ idx ].timers[ j ].active = timerObject["active"].as<bool>();
       JsonArray daysArray = timerObject["days"].as<JsonArray>();
 
@@ -565,8 +495,8 @@ void prepareJSON( void )
     for ( int j = 0; j < TIMER_PER_RELAY; j++)
     {
       doc["relays"][0]["timers"][j]["active"] = relays[i].timers[j].active;
-      doc["relays"][0]["timers"][j]["start"] = shortToTimeString( relays[i].timers[j].sStarttime );
-      doc["relays"][0]["timers"][j]["stop"] = shortToTimeString( relays[i].timers[j].sStoptime );
+      doc["relays"][0]["timers"][j]["start"] = relays[i].timers[j].getStartTime( );
+      doc["relays"][0]["timers"][j]["stop"] = relays[i].timers[j].getStopTime( );
 
       byte days = *(byte*)(&relays[i].timers[j].days);
       int dayElemJSON = 0;
