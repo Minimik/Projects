@@ -1,10 +1,25 @@
 #include <lvgl.h>
 #include <TFT_eSPI.h>
 
+const int adcPin = 34;
+const int signalPin = 21;
+
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 240
 
 TFT_eSPI tft = TFT_eSPI();
+
+// Zeitstempel
+volatile unsigned long lastMicros = 0;
+volatile unsigned long intervalMicros = 0;
+volatile bool newRPM = false;
+
+void IRAM_ATTR pulseISR() {
+  unsigned long now = micros();
+  intervalMicros = now - lastMicros;
+  lastMicros = now;
+  newRPM = true;
+}
 
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t buf1[SCREEN_WIDTH * 10];  // Zeilenpuffer
@@ -30,6 +45,16 @@ static lv_obj_t *meter;
 
 void setup() {
   Serial.begin(115200);
+
+  // ADC konfigurieren
+  analogReadResolution(12);  // 12 Bit Auflösung
+  analogSetAttenuation(ADC_11db);  
+
+  pinMode(signalPin, INPUT_PULLUP);
+
+  // Interrupt auf FALLING, RISING oder CHANGE
+  attachInterrupt(digitalPinToInterrupt(signalPin), pulseISR, RISING);
+
   lv_init();
   tft.init();
   tft.setRotation(0);
@@ -105,7 +130,9 @@ void setup() {
   lv_meter_set_indicator_value(meter, red, 8000);
 
   // Zufall initialisieren
-  randomSeed(analogRead(0));
+  unsigned long adcVal = analogRead( adcPin );
+  Serial.println( adcVal );
+  randomSeed( adcVal );
 }
 
 int oldValue = 0;
@@ -152,7 +179,20 @@ void loop() {
   }
 
 
+  if (newRPM) {
+    noInterrupts();
+    unsigned long interval = intervalMicros;
+    newRPM = false;
+    interrupts();
 
+    if (interval > 0) {
+      float rpm = 60.0e6 / interval; // 60 Mio µs / Zeit = RPM
+      Serial.print("");
+      Serial.println(rpm);
+    } else {
+      Serial.println("Warte auf 2. Impuls...");
+    }
+  }
 
   //delay(500);  // neue Zufallswerte alle 0,5 Sekunden
 }
